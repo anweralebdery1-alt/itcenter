@@ -1,0 +1,264 @@
+{% extends 'store/base.html' %}
+{% load store_extras %}
+{% block title %}{{ settings.site_name }}{% endblock %}
+{% block extra_css %}
+<style>
+  /* ---------- Showcase cards (الأكثر مبيعاً / طلباً ...) ---------- */
+  .showcase {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+    margin: 4px 0 10px;
+  }
+  .showcase-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+  }
+  .showcase-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--orange); }
+  .showcase-head { display: flex; align-items: center; gap: 12px; }
+  .showcase-emoji {
+    width: 46px; height: 46px; border-radius: 12px; flex: none;
+    display: grid; place-items: center; font-size: 23px;
+    background: linear-gradient(135deg, #eef5ff, #fff3e3);
+  }
+  .showcase-head strong { font-size: 16px; display: block; color: var(--ink); }
+  .showcase-sub { font-size: 12px; color: var(--blue); font-weight: 800; }
+  .showcase-thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .thumb {
+    aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden;
+    background: linear-gradient(135deg, #eaf2ff, #fff1dc);
+    display: grid; place-items: center; color: var(--blue); font-weight: 900; font-size: 15px;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .thumb.ph { opacity: .45; }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin: 26px 0 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .toolbar h2, .toolbar h3 { letter-spacing: -.3px; }
+  .toolbar .section-tag {
+    display: inline-block; width: 5px; height: 26px; border-radius: 99px;
+    background: linear-gradient(var(--orange), var(--blue)); margin-inline-end: 10px; vertical-align: middle;
+  }
+
+  .sort-select {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    background: #fff;
+    font-family: inherit;
+    font-weight: 700;
+    color: var(--ink);
+    cursor: pointer;
+  }
+
+  .stock { color: #047857; font-size: 12.5px; font-weight: 800; }
+  .out { color: #b42318; font-size: 12.5px; font-weight: 800; }
+
+  .card-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .card-actions .btn {
+    font-size: 13px;
+    padding: 10px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+  }
+  .card-actions form { display: flex; }
+
+  @media (max-width: 900px) { .toolbar { align-items: stretch; flex-direction: column; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="container-wide mt-4">
+  {% if not search and not selected_category and not request.GET.view %}
+  <section class="showcase">
+    <a class="showcase-card" href="{% url 'courses' %}">
+      <div class="showcase-head">
+        <span class="showcase-emoji">🎓</span>
+        <div><strong>الدورات التدريبية</strong><span class="showcase-sub">عرض الكل ←</span></div>
+      </div>
+      <div class="showcase-thumbs">
+        {% for c in home_courses|slice:":4" %}<span class="thumb">{% if c.image %}<img src="{{ c.image.url }}" alt="{{ c.title }}">{% else %}{{ c.title|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">🎓</span><span class="thumb ph">🎓</span><span class="thumb ph">🎓</span><span class="thumb ph">🎓</span>{% endfor %}
+      </div>
+    </a>
+    <a class="showcase-card" href="{% url 'videos' %}">
+      <div class="showcase-head">
+        <span class="showcase-emoji">▶️</span>
+        <div><strong>فيديوهات تعليمية</strong><span class="showcase-sub">عرض الكل ←</span></div>
+      </div>
+      <div class="showcase-thumbs">
+        {% for v in home_videos|slice:":4" %}<span class="thumb">{% if v.thumbnail %}<img src="{{ v.thumbnail.url }}" alt="{{ v.title }}">{% else %}▶{% endif %}</span>{% empty %}<span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span>{% endfor %}
+      </div>
+    </a>
+    <a class="showcase-card" href="/?sort=best">
+      <div class="showcase-head">
+        <span class="showcase-emoji">🔥</span>
+        <div><strong>الأكثر مبيعاً</strong><span class="showcase-sub">عرض الكل ←</span></div>
+      </div>
+      <div class="showcase-thumbs">
+        {% for p in best %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+      </div>
+    </a>
+    <a class="showcase-card" href="/?sort=popular">
+      <div class="showcase-head">
+        <span class="showcase-emoji">⭐</span>
+        <div><strong>الأكثر طلباً</strong><span class="showcase-sub">عرض الكل ←</span></div>
+      </div>
+      <div class="showcase-thumbs">
+        {% for p in popular %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+      </div>
+    </a>
+    <a class="showcase-card" href="/?sort=offers">
+      <div class="showcase-head">
+        <span class="showcase-emoji">🏷️</span>
+        <div><strong>العروض الخاصة</strong><span class="showcase-sub">عرض الكل ←</span></div>
+      </div>
+      <div class="showcase-thumbs">
+        {% for p in offers %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+      </div>
+    </a>
+    <a class="showcase-card" href="/?sort=newest">
+      <div class="showcase-head">
+        <span class="showcase-emoji">🆕</span>
+        <div><strong>وصل حديثاً</strong><span class="showcase-sub">عرض الكل ←</span></div>
+      </div>
+      <div class="showcase-thumbs">
+        {% for p in newest %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+      </div>
+    </a>
+  </section>
+  {% endif %}
+
+  <div class="toolbar" id="products">
+    <div>
+      <h2 class="m-0 fw-bold"><span class="section-tag"></span>{% if search %}نتائج البحث عن "{{ search }}"{% elif sort == 'best' %}الأكثر مبيعاً{% elif sort == 'popular' %}الأكثر طلباً{% elif sort == 'offers' %}العروض الخاصة{% else %}كل المنتجات{% endif %}</h2>
+      <div class="text-muted mt-1">عرض المنتجات مع السلة والطلب والتحقق من الهاتف.</div>
+    </div>
+    <form method="get" class="d-flex gap-2 flex-wrap">
+      {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
+      {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+      <select class="sort-select" name="sort" onchange="this.form.submit()">
+        <option value="newest" {% if sort == 'newest' %}selected{% endif %}>الأحدث</option>
+        <option value="best" {% if sort == 'best' %}selected{% endif %}>الأكثر مبيعاً</option>
+        <option value="popular" {% if sort == 'popular' %}selected{% endif %}>الأكثر طلباً</option>
+        <option value="offers" {% if sort == 'offers' %}selected{% endif %}>العروض</option>
+        <option value="price_low" {% if sort == 'price_low' %}selected{% endif %}>السعر الأقل</option>
+        <option value="price_high" {% if sort == 'price_high' %}selected{% endif %}>السعر الأعلى</option>
+      </select>
+      <select class="sort-select" name="per" onchange="this.form.submit()">
+        {% for n in per_options %}<option value="{{ n }}" {% if per == n %}selected{% endif %}>عرض {{ n }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+
+  <div class="product-grid">
+    {% for p in products %}
+      <div class="product-card">
+        <a href="{% url 'product_detail' p.id %}">
+          <div class="product-image">
+            <div class="card-badges">
+              {% if p.is_offer %}<span class="badge-pill badge-offer">عرض خاص</span>{% endif %}
+              {% if p.quantity <= 0 %}<span class="badge-pill badge-out">نفد المخزون</span>{% endif %}
+            </div>
+            {% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}
+          </div>
+        </a>
+        <div class="product-info">
+          <a href="{% url 'product_detail' p.id %}" class="product-name d-block">{{ p.name }}</a>
+          <div class="product-desc">{{ p.description|default:"منتج متوفر من مخزون المحل"|truncatechars:72 }}</div>
+          <div class="spacer"></div>
+          <div class="price">{{ p.sell_price|money }} <small>د.ع</small></div>
+          <div class="d-flex justify-content-between align-items-center mt-1">
+            <span class="sku">SKU: {{ p.sku }}</span>
+            {% if p.quantity > 0 %}<span class="stock">● متوفر {{ p.quantity }}</span>{% else %}<span class="out">● نفد</span>{% endif %}
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-outline-primary" href="{% url 'product_detail' p.id %}">التفاصيل</a>
+            <form method="post" action="{% url 'cart_add' p.id %}" class="add-to-cart">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button class="btn btn-orange" type="submit" {% if p.quantity <= 0 %}disabled{% endif %}>أضف للسلة</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="empty-state">لا توجد منتجات حالياً. شغل المزامنة أو أضف منتجات من لوحة الإدارة.</div>
+    {% endfor %}
+
+    {% comment %} الدورات المتوفرة تظهر ضمن المنتجات كبطاقات {% endcomment %}
+    {% if not search and not selected_category and not request.GET.view and sort == 'newest' %}
+      {% for c in home_courses %}
+      <div class="product-card">
+        <a href="{% url 'courses' %}">
+          <div class="product-image">
+            <div class="card-badges"><span class="badge-pill badge-new">دورة تدريبية</span></div>
+            {% if c.image %}<img src="{{ c.image.url }}" alt="{{ c.title }}">{% else %}🎓{% endif %}
+          </div>
+        </a>
+        <div class="product-info">
+          <a href="{% url 'courses' %}" class="product-name d-block">{{ c.title }}</a>
+          <div class="product-desc">{{ c.description|default:"دورة تدريبية في المركز"|truncatechars:72 }}</div>
+          <div class="spacer"></div>
+          <div class="price">{% if c.price %}{{ c.price|money }} <small>د.ع</small>{% else %}<span style="color:#047857">مجانية</span>{% endif %}</div>
+          <div class="d-flex justify-content-between align-items-center mt-1">
+            <span class="sku">👤 {{ c.trainer|default:"يحدد لاحقاً" }}</span>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-outline-primary" href="{% url 'courses' %}">التفاصيل</a>
+            <a class="btn btn-orange" href="{% url 'checkout_phone' %}">التسجيل</a>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  {% if visited_products %}
+  <div class="toolbar mt-5">
+    <div>
+      <h3 class="m-0 fw-bold"><span class="section-tag"></span>شاهدتها مؤخراً</h3>
+      <div class="text-muted mt-1">اقتراحات بناءً على زيارتك للمنتجات.</div>
+    </div>
+  </div>
+  <div class="product-grid mb-4">
+    {% for p in visited_products %}
+      <div class="product-card">
+        <a href="{% url 'product_detail' p.id %}">
+          <div class="product-image">
+            {% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}
+          </div>
+        </a>
+        <div class="product-info">
+          <a href="{% url 'product_detail' p.id %}" class="product-name d-block">{{ p.name }}</a>
+          <div class="spacer"></div>
+          <div class="price">{{ p.sell_price|money }} <small>د.ع</small></div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</main>
+{% endblock %}

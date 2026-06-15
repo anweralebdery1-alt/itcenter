@@ -1,0 +1,33 @@
+from django.contrib import admin
+from django.urls import path, include, re_path
+from django.conf import settings
+from django.conf.urls.static import static
+from django.views.static import serve
+from store import views
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', views.home, name='home'),
+    path('courses/', views.courses, name='courses'),
+    path('videos/', views.videos, name='videos'),
+    path('about/', views.about, name='about'),
+    path('account/', views.account, name='account'),
+    path('product/<int:pk>/', views.product_detail, name='product_detail'),
+    path('cart/', views.cart_view, name='cart'),
+    path('cart/add/<int:pk>/', views.cart_add, name='cart_add'),
+    path('cart/update/<int:pk>/', views.cart_update, name='cart_update'),
+    path('cart/remove/<int:pk>/', views.cart_remove, name='cart_remove'),
+    path('checkout/', views.checkout_phone, name='checkout_phone'),
+    path('checkout/otp/', views.checkout_otp, name='checkout_otp'),
+    path('checkout/details/', views.checkout_details, name='checkout_details'),
+    path('order/<int:order_id>/success/', views.order_success, name='order_success'),
+    path('order/<int:order_id>/payment/', views.payment_redirect, name='payment_redirect'),
+    path('api/', include('store.api_urls')),
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+else:
+    # خدمة ملفات الوسائط (صور المنتجات) في الإنتاج أيضاً — مناسب لموقع صغير/تجريبي
+    urlpatterns += [
+        re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+    ]

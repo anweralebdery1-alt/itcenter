@@ -1,0 +1,28 @@
+{% extends 'store/base.html' %}
+{% block title %}فيديوهات تعليمية | {{ settings.site_name }}{% endblock %}
+{% block content %}
+<main class="container-wide mt-4">
+  <h2 class="fw-bold">فيديوهات تعليمية</h2>
+  <p class="text-muted">كل فيديو يمكن أن يحتوي ملفات كود قابلة للتحميل مجاناً.</p>
+  <div class="product-grid">
+    {% for video in videos %}
+      <div class="product-card">
+        <div class="product-image">
+          {% if video.thumbnail %}<img src="{{ video.thumbnail.url }}" alt="{{ video.title }}">{% else %}▶{% endif %}
+        </div>
+        <div class="product-info">
+          <div class="product-name">{{ video.title }}</div>
+          <div class="product-desc">{{ video.description|truncatechars:100 }}</div>
+          <div class="spacer"></div>
+          {% if video.video_url %}<a class="btn btn-blue w-100 mt-2" href="{{ video.video_url }}" target="_blank">▶ مشاهدة الفيديو</a>{% endif %}
+          {% for file in video.files.all %}
+            <a class="btn btn-outline-primary w-100 mt-2" href="{{ file.file.url }}">⬇ تحميل {{ file.title }}</a>
+          {% endfor %}
+        </div>
+      </div>
+    {% empty %}
+      <div class="empty-state">لا توجد فيديوهات مضافة بعد.</div>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}

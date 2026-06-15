@@ -1,0 +1,18 @@
+{% extends 'store/base.html' %}
+{% load store_extras %}
+{% block title %}الدفع الإلكتروني | {{ settings.site_name }}{% endblock %}
+{% block content %}
+<main class="container-wide">
+  <div class="panel p-5 mt-4">
+    <h2 class="fw-bold">التحويل إلى بوابة الدفع</h2>
+    <p class="text-muted">
+      تم إنشاء الطلب #{{ order.id }} بقيمة {{ order.total|money }} د.ع.
+      هذه صفحة جاهزة للربط مع بوابة دفع إلكتروني. عند تفعيل Mastercard/Visa من مزود دفع، نضع هنا طلب API والتحويل الآمن.
+    </p>
+    <div class="alert alert-warning">
+      حالياً لم يتم ربط بوابة دفع فعلية، لذلك الطلب محفوظ بحالة قيد المراجعة.
+    </div>
+    <a class="btn btn-blue px-5" href="{% url 'order_success' order.id %}">متابعة كتجربة</a>
+  </div>
+</main>
+{% endblock %}

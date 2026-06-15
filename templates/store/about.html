@@ -1,0 +1,37 @@
+{% extends 'store/base.html' %}
+{% block title %}حول المركز | {{ settings.site_name }}{% endblock %}
+{% block content %}
+<main class="container-wide mt-4">
+  <section class="panel p-4 mb-4">
+    <h2 class="fw-bold">{{ settings.site_name }}</h2>
+    <p class="text-muted fs-5">{{ settings.hero_subtitle }}</p>
+    {% if settings.address %}<div>العنوان: {{ settings.address }}</div>{% endif %}
+    {% if settings.phone %}<div>الهاتف: {{ settings.phone }}</div>{% endif %}
+    {% if settings.whatsapp %}<div>واتساب: {{ settings.whatsapp }}</div>{% endif %}
+  </section>
+
+  <h3 class="fw-bold mb-3">فريق المركز</h3>
+  <div class="product-grid">
+    {% for person in team %}
+      <div class="product-card">
+        <div class="product-image">
+          {% if person.image %}<img src="{{ person.image.url }}" alt="{{ person.name }}">{% else %}{{ person.name|first|upper }}{% endif %}
+        </div>
+        <div class="product-info">
+          <div class="product-name">{{ person.name }}</div>
+          <div class="sku">{{ person.role }}</div>
+          <div class="product-desc">{{ person.bio|truncatechars:120 }}</div>
+          {% if person.phone %}<div class="mt-2">هاتف: {{ person.phone }}</div>{% endif %}
+          <div class="d-flex gap-2 flex-wrap mt-2">
+            {% if person.facebook %}<a class="btn btn-outline-primary btn-sm" href="{{ person.facebook }}" target="_blank">Facebook</a>{% endif %}
+            {% if person.instagram %}<a class="btn btn-outline-primary btn-sm" href="{{ person.instagram }}" target="_blank">Instagram</a>{% endif %}
+            {% if person.linkedin %}<a class="btn btn-outline-primary btn-sm" href="{{ person.linkedin }}" target="_blank">LinkedIn</a>{% endif %}
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="empty-state">أضف أشخاص المركز من لوحة الإدارة.</div>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}

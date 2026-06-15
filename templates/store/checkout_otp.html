@@ -1,0 +1,19 @@
+{% extends 'store/base.html' %}
+{% block title %}رمز التحقق | {{ settings.site_name }}{% endblock %}
+{% block content %}
+<main class="container-wide">
+  <div class="panel p-4 mt-4" style="max-width:620px">
+    <h3 class="fw-bold">أدخل رمز OTP</h3>
+    <p class="text-muted">تم إنشاء رمز تحقق للرقم {{ phone }}.</p>
+    {% if dev_otp_code %}
+      <div class="alert alert-warning">رمزك المؤقت: <strong style="font-size:20px;letter-spacing:3px">{{ dev_otp_code }}</strong><br>الرمز مُدخَل تلقائياً، اضغط «تأكيد». عند ربط SMS حقيقي لن يظهر الرمز هنا.</div>
+    {% endif %}
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <input class="form-control form-control-lg mb-3" name="code" maxlength="6" placeholder="رمز من 6 أرقام" value="{{ dev_otp_code }}" required>
+      <button class="btn btn-orange btn-lg px-5" type="submit">تأكيد الرمز</button>
+    </form>
+  </div>
+</main>
+{% endblock %}

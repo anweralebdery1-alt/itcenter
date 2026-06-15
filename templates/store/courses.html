@@ -1,0 +1,28 @@
+{% extends 'store/base.html' %}
+{% load store_extras %}
+{% block title %}الدورات التدريبية | {{ settings.site_name }}{% endblock %}
+{% block content %}
+<main class="container-wide mt-4">
+  <h2 class="fw-bold">الدورات التدريبية</h2>
+  <p class="text-muted">يمكنك إدارة الدورات وصورها وأسعارها من لوحة الإدارة.</p>
+  <div class="product-grid">
+    {% for course in courses %}
+      <div class="product-card">
+        <div class="product-image">
+          {% if course.image %}<img src="{{ course.image.url }}" alt="{{ course.title }}">{% else %}{{ course.title|first|upper }}{% endif %}
+        </div>
+        <div class="product-info">
+          <div class="product-name">{{ course.title }}</div>
+          <div class="product-desc">{{ course.description|truncatechars:100 }}</div>
+          <div class="sku mt-1">👤 المدرب: {{ course.trainer|default:"يحدد لاحقاً" }}{% if course.duration %} · ⏱ {{ course.duration }}{% endif %}</div>
+          <div class="spacer"></div>
+          <div class="price">{% if course.price %}{{ course.price|money }} <small>د.ع</small>{% else %}<span style="color:#047857">مجانية / يحدد لاحقاً</span>{% endif %}</div>
+          <a href="{% url 'checkout_phone' %}" class="btn btn-orange w-100 mt-2">التسجيل في الدورة</a>
+        </div>
+      </div>
+    {% empty %}
+      <div class="empty-state">لا توجد دورات مضافة بعد.</div>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}

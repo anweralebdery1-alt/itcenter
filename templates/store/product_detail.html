@@ -1,0 +1,187 @@
+{% extends 'store/base.html' %}
+{% load store_extras %}
+{% block title %}{{ product.name }} | {{ settings.site_name }}{% endblock %}
+{% block extra_css %}
+<style>
+  .detail-layout {
+    display: grid;
+    grid-template-columns: minmax(320px, 460px) 1fr 330px;
+    gap: 18px;
+    margin-top: 24px;
+  }
+
+  .media-box {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .product-photo {
+    aspect-ratio: 1 / 1;
+    background: linear-gradient(135deg, #eaf2ff, #fff1dc);
+    display: grid;
+    place-items: center;
+    color: var(--blue);
+    font-size: 84px;
+    font-weight: 900;
+  }
+
+  .product-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+  .info-box, .buy-box, .description-box {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 18px;
+  }
+
+  .title { font-size: 28px; font-weight: 900; line-height: 1.35; }
+  .rating { color: #f59e0b; font-weight: 900; margin: 10px 0; }
+  .price { color: #b45309; font-size: 32px; font-weight: 900; }
+  .muted { color: var(--muted); }
+
+  .spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+  }
+
+  .spec-table td {
+    border-bottom: 1px solid var(--line);
+    padding: 10px;
+  }
+
+  .spec-table td:first-child {
+    color: var(--muted);
+    width: 38%;
+    background: #f8fafc;
+  }
+
+  .qty-input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px;
+  }
+
+  .similar-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+
+  .mini-product {
+    overflow: hidden;
+  }
+
+  .mini-img {
+    aspect-ratio: 1 / 1;
+    background: linear-gradient(135deg, #eaf2ff, #fff1dc);
+    display: grid;
+    place-items: center;
+    color: var(--blue);
+    font-size: 34px;
+    font-weight: 900;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  .mini-img img { width: 100%; height: 100%; object-fit: cover; }
+
+  @media (max-width: 1100px) { .detail-layout { grid-template-columns: 1fr 1fr; } .buy-box { grid-column: 1 / -1; } }
+  @media (max-width: 760px) { .detail-layout { grid-template-columns: 1fr; } .similar-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="container-wide">
+  <div class="detail-layout">
+    <div class="media-box">
+      <div class="product-photo">
+        {% if product.image %}<img src="{{ product.image.url }}" alt="{{ product.name }}">{% else %}{{ product.name|first|upper }}{% endif %}
+      </div>
+    </div>
+
+    <section class="info-box">
+      <h1 class="title">{{ product.name }}</h1>
+      <div class="rating">★★★★★ <span class="muted">تقييم تجريبي | SKU: {{ product.sku }}</span></div>
+      <div class="price">{{ product.sell_price|money }} د.ع</div>
+      <div class="mt-3">
+        {% if product.quantity > 0 %}
+          <span class="badge bg-success">متوفر في المخزن: {{ product.quantity }}</span>
+        {% else %}
+          <span class="badge bg-danger">غير متوفر حالياً</span>
+        {% endif %}
+        {% if product.is_offer %}<span class="badge bg-warning text-dark">عرض خاص</span>{% endif %}
+      </div>
+
+      <hr>
+      <h5 class="fw-bold">الوصف</h5>
+      <p class="muted">{{ product.description|default:"لا يوجد وصف مفصل بعد. يمكنك إضافة وصف المنتج من لوحة الإدارة." }}</p>
+
+      <h5 class="fw-bold mt-4">المواصفات</h5>
+      <table class="spec-table">
+        <tr><td>التصنيف</td><td>{{ product.category.name|default:"غير مصنف" }}</td></tr>
+        <tr><td>السلسلة</td><td>{{ product.series.name|default:"غير محدد" }}</td></tr>
+        <tr><td>رمز المنتج</td><td>{{ product.sku }}</td></tr>
+        {% for key, value in product.specifications.items %}
+          <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+        {% empty %}
+          <tr><td>مواصفات إضافية</td><td>أضفها من حقل specifications في لوحة الإدارة بصيغة JSON.</td></tr>
+        {% endfor %}
+      </table>
+    </section>
+
+    <aside class="buy-box">
+      <div class="fw-bold mb-2">شراء سريع</div>
+      <div class="muted mb-3">أضف المنتج للسلة ثم أكمل الطلب برقم الهاتف ورمز OTP.</div>
+      <form method="post" action="{% url 'cart_add' product.id %}" class="add-to-cart">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'cart' %}">
+        <label class="form-label">الكمية</label>
+        <input class="qty-input" type="number" min="1" max="{{ product.quantity }}" value="1" name="qty">
+        <button class="btn btn-orange w-100 mt-3 py-3" type="submit" {% if product.quantity <= 0 %}disabled{% endif %}>أضف إلى السلة</button>
+      </form>
+      <a href="{% url 'cart' %}" class="btn btn-blue w-100 mt-2 py-3">اذهب للسلة</a>
+      <hr>
+      <div class="small muted">خيارات الدفع: الدفع عند الاستلام، أو الدفع الإلكتروني عند ربط بوابة دفع.</div>
+    </aside>
+  </div>
+
+  <section class="description-box mt-4">
+    <h4 class="fw-bold mb-3">منتجات مشابهة</h4>
+    <div class="similar-grid">
+      {% for s in similar %}
+        <a class="panel p-3 mini-product" href="{% url 'product_detail' s.id %}">
+          <div class="mini-img">
+            {% if s.image %}<img src="{{ s.image.url }}" alt="{{ s.name }}">{% else %}{{ s.name|first|upper }}{% endif %}
+          </div>
+          <strong>{{ s.name }}</strong>
+          <div class="text-muted mt-2">{{ s.sell_price|money }} د.ع</div>
+        </a>
+      {% empty %}
+        <div class="text-muted">لا توجد منتجات مشابهة حالياً.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if visited_products %}
+  <section class="description-box mt-4">
+    <h4 class="fw-bold mb-3">شاهدتها مؤخراً</h4>
+    <div class="similar-grid">
+      {% for s in visited_products %}
+        <a class="panel p-3 mini-product" href="{% url 'product_detail' s.id %}">
+          <div class="mini-img">
+            {% if s.image %}<img src="{{ s.image.url }}" alt="{{ s.name }}">{% else %}{{ s.name|first|upper }}{% endif %}
+          </div>
+          <strong>{{ s.name }}</strong>
+          <div class="text-muted mt-2">{{ s.sell_price|money }} د.ع</div>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

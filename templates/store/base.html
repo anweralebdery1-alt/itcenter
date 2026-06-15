@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ settings.site_name|default:"مركز آي تي للتطوير والتدريب" }}{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --blue: {{ settings.primary_color|default:"#0B4EA2" }};
+      --blue-dark: #07356f;
+      --orange: {{ settings.accent_color|default:"#FF8A00" }};
+      --orange-dark: #e67700;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e6ecf5;
+      --soft: #f4f6fb;
+      --radius: 14px;
+      --radius-sm: 10px;
+      --shadow-sm: 0 1px 2px rgba(15,23,42,.06), 0 2px 6px rgba(15,23,42,.05);
+      --shadow-md: 0 10px 30px rgba(15,23,42,.10);
+      --shadow-lg: 0 20px 45px rgba(15,23,42,.16);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Tajawal", Tahoma, Arial, sans-serif;
+      background: var(--soft);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    .container-wide { max-width: 1480px; margin: 0 auto; padding: 0 18px; }
+
+    /* ---------- Header ---------- */
+    .market-header {
+      background: linear-gradient(135deg, var(--blue-dark), var(--blue));
+      color: #fff;
+      padding: 14px 0;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: 0 8px 24px rgba(2, 8, 23, .18);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 240px;
+    }
+
+    .brand-logo {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: linear-gradient(135deg, #fff, var(--orange));
+      color: var(--blue-dark);
+      font-weight: 900;
+      box-shadow: 0 6px 14px rgba(0,0,0,.2);
+      flex: none;
+    }
+
+    .brand-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .brand-name { font-weight: 900; font-size: 21px; line-height: 1.1; }
+    .brand-sub { font-size: 12px; opacity: .85; margin-top: 3px; }
+
+    .search-form {
+      flex: 1;
+      display: flex;
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      min-width: 240px;
+      box-shadow: 0 6px 16px rgba(2,8,23,.18);
+    }
+
+    .search-form input {
+      border: 0;
+      flex: 1;
+      padding: 13px 16px;
+      outline: none;
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--ink);
+    }
+
+    .search-form button {
+      border: 0;
+      background: linear-gradient(135deg, var(--orange), var(--orange-dark));
+      color: #fff;
+      font-weight: 900;
+      padding: 0 26px;
+      cursor: pointer;
+      transition: filter .15s ease;
+    }
+    .search-form button:hover { filter: brightness(1.06); }
+
+    .header-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: #fff;
+      font-weight: 800;
+      font-size: 14px;
+      justify-content: center;
+      transition: background .15s ease, transform .15s ease;
+    }
+    .header-action:hover { color: #fff; background: rgba(255,255,255,.22); transform: translateY(-1px); }
+    .header-action .ico { width: 19px; height: 19px; flex: none; }
+    .header-action .cart-count {
+      background: var(--orange); color: #fff; font-size: 11px; font-weight: 900;
+      border-radius: 999px; padding: 1px 7px; line-height: 1.5;
+    }
+    /* hide the text label on small screens, keep icons */
+    @media (max-width: 600px) { .header-action .label { display: none; } .header-action { padding: 10px; } }
+
+    /* ---------- Category nav ---------- */
+    .category-nav {
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 6px 18px rgba(15, 23, 42, .04);
+    }
+
+    .category-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 12px 0;
+      scrollbar-width: thin;
+    }
+    .category-strip::-webkit-scrollbar { height: 6px; }
+    .category-strip::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+
+    .category-link {
+      padding: 9px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      white-space: nowrap;
+      font-weight: 700;
+      font-size: 14px;
+      color: #334155;
+      transition: all .15s ease;
+    }
+
+    .category-link.active,
+    .category-link:hover {
+      border-color: var(--orange);
+      color: var(--blue);
+      background: linear-gradient(135deg, #fff7ed, #eef5ff);
+      box-shadow: var(--shadow-sm);
+    }
+    .category-link .ico { width: 17px; height: 17px; vertical-align: -3px; margin-inline-end: 5px; }
+
+    /* ---------- Secondary "shop by" strip (trending + categories) ---------- */
+    .filter-nav {
+      background: #fbfcfe;
+      border-bottom: 1px solid var(--line);
+    }
+    .filter-strip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 0;
+      scrollbar-width: thin;
+    }
+    .filter-strip::-webkit-scrollbar { height: 6px; }
+    .filter-strip::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+    .filter-label { font-weight: 800; font-size: 13px; color: var(--muted); white-space: nowrap; margin-inline-end: 2px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 7px 14px; border-radius: 999px; white-space: nowrap;
+      font-weight: 700; font-size: 13px; color: #334155;
+      background: #fff; border: 1px solid var(--line); transition: all .15s ease;
+    }
+    .chip:hover, .chip.active { color: #fff; background: var(--blue); border-color: var(--blue); }
+    .chip.hot:hover, .chip.hot.active { background: linear-gradient(135deg, #ef4444, #b91c1c); border-color: #b91c1c; }
+    .chip-divider { width: 1px; height: 22px; background: var(--line); flex: none; margin: 0 4px; }
+
+    /* ---------- Buttons ---------- */
+    .btn { border-radius: var(--radius-sm); font-weight: 800; transition: filter .15s ease, transform .15s ease, box-shadow .15s ease; }
+    .btn:active { transform: translateY(1px); }
+
+    .btn-blue {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+    .btn-blue:hover { color: #fff; filter: brightness(1.08); }
+
+    .btn-orange {
+      background: linear-gradient(135deg, var(--orange), var(--orange-dark));
+      border: 0;
+      color: #fff;
+    }
+    .btn-orange:hover { color: #fff; filter: brightness(1.06); box-shadow: 0 8px 18px rgba(230,119,0,.28); }
+    .btn-orange:disabled { background: #cbd5e1; color: #fff; filter: none; box-shadow: none; }
+
+    .btn-outline-primary { border-color: var(--line); color: var(--blue); background: #fff; }
+    .btn-outline-primary:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+    .panel {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    /* ---------- Product grid & cards ---------- */
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .product-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease;
+    }
+
+    .product-card:hover {
+      transform: translateY(-4px);
+      border-color: #cdd9ec;
+      box-shadow: var(--shadow-md);
+    }
+
+    .product-image {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      background: linear-gradient(135deg, #eaf2ff, #fff1dc);
+      display: grid;
+      place-items: center;
+      color: var(--blue);
+      font-weight: 900;
+      font-size: 42px;
+      overflow: hidden;
+    }
+
+    .product-image img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
+    .product-card:hover .product-image img { transform: scale(1.05); }
+
+    /* badges over the image */
+    .card-badges { position: absolute; top: 10px; inset-inline-start: 10px; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
+    .badge-pill {
+      font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px;
+      color: #fff; box-shadow: var(--shadow-sm); line-height: 1.6;
+    }
+    .badge-offer { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+    .badge-new { background: linear-gradient(135deg, var(--blue), var(--blue-dark)); }
+    .badge-out { background: #475569; }
+
+    .product-info {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .product-name {
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.45;
+      color: var(--ink);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 43px;
+    }
+    .product-name:hover { color: var(--blue); }
+
+    .product-desc {
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.6;
+      margin-top: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 40px;
+    }
+
+    .price { font-size: 21px; font-weight: 900; color: var(--orange-dark); margin-top: 10px; }
+    .price small { font-size: 13px; font-weight: 700; color: var(--muted); }
+    .sku { color: var(--muted); font-size: 12px; }
+
+    /* push actions to the bottom so every card lines up */
+    .product-info .spacer { flex: 1; }
+
+    .empty-state {
+      grid-column: 1 / -1;
+      background: #fff;
+      border: 1px dashed #cbd5e1;
+      border-radius: var(--radius);
+      padding: 44px 30px;
+      color: var(--muted);
+      text-align: center;
+      font-weight: 600;
+    }
+
+    /* ---------- Add-to-cart toast ---------- */
+    .toast-note {
+      position: fixed; bottom: 22px; inset-inline-start: 22px; z-index: 999;
+      display: flex; align-items: center; gap: 10px;
+      background: linear-gradient(135deg, #0f5132, #157347); color: #fff;
+      padding: 13px 18px; border-radius: 12px; box-shadow: var(--shadow-lg);
+      font-weight: 800; max-width: 90vw;
+      transform: translateY(160%); opacity: 0; transition: transform .3s ease, opacity .3s ease;
+    }
+    .toast-note.show { transform: translateY(0); opacity: 1; }
+    .toast-note .tick { width: 22px; height: 22px; flex: none; background: rgba(255,255,255,.2); border-radius: 50%; display: grid; place-items: center; }
+
+    /* ---------- Footer ---------- */
+    .footer {
+      margin-top: 52px;
+      background: linear-gradient(135deg, #0a1a36, #08172f);
+      color: #cbd5e1;
+      padding: 40px 0;
+    }
+    .footer strong { color: #fff; font-size: 18px; }
+
+    @media (max-width: 900px) {
+      .header-row { gap: 10px; }
+      .brand { width: auto; min-width: 0; }
+      .search-form { order: 3; width: 100%; flex: 1 0 100%; }
+      .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    }
+
+    /* keep two columns even on small phones */
+    @media (max-width: 600px) {
+      .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .product-info { padding: 11px; }
+      .product-name { font-size: 13.5px; min-height: 38px; }
+      .price { font-size: 18px; }
+      .card-actions .btn { font-size: 12px; padding: 8px 4px; }
+    }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <header class="market-header">
+    <div class="container-wide">
+      <div class="header-row d-flex align-items-center gap-3 flex-wrap">
+        <a href="/" class="brand">
+          <span class="brand-logo">
+            {% if settings.logo %}<img src="{{ settings.logo.url }}" alt="{{ settings.site_name }}">{% else %}IT{% endif %}
+          </span>
+          <span>
+            <span class="brand-name d-block">{{ settings.site_name|default:"مركز آي تي للتطوير والتدريب" }}</span>
+            <span class="brand-sub d-block">{{ settings.tagline|default:"إلكترونيات، دورات، وفيديوهات تعليمية" }}</span>
+          </span>
+        </a>
+
+        <form class="search-form" action="/" method="get">
+          <input name="search" value="{{ search|default:'' }}" placeholder="ابحث عن منتج، دورة، فيديو، أو SKU">
+          <button type="submit">بحث</button>
+        </form>
+
+        <a class="header-action" href="{% url 'about' %}" title="حول المركز">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span class="label">حول المركز</span>
+        </a>
+        <a class="header-action" href="{% url 'account' %}" title="حسابي">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span class="label">حسابي</span>
+        </a>
+        <a class="header-action" href="{% url 'cart' %}" title="السلة">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <span class="label">السلة</span><span class="cart-count" id="cart-count" {% if not cart_count %}hidden{% endif %}>{{ cart_count|default:0 }}</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <nav class="category-nav">
+    <div class="container-wide category-strip">
+      <a class="category-link {% if request.path == '/' and not request.GET.view and not selected_category %}active{% endif %}" href="/">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        الرئيسية
+      </a>
+      {% for section in sections %}
+        {% if section.section_type != 'about' %}
+          {% if section.section_type == 'electronics' %}
+            <a class="category-link {% if request.GET.view == 'electronics' %}active{% endif %}" href="/?view=electronics">{{ section.title }}</a>
+          {% else %}
+            <a class="category-link {% if section.url and section.url != '/' and section.url == request.path %}active{% endif %}" href="{{ section.url|default:'#' }}">{{ section.title }}</a>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+    </div>
+  </nav>
+
+  {% comment %} شريط التصنيفات يظهر فقط في قسم الإلكترونيات (وأثناء التصفية داخله) {% endcomment %}
+  {% if categories and request.path == '/' and request.GET.view == 'electronics' %}
+  <div class="filter-nav">
+    <div class="container-wide filter-strip">
+      <span class="filter-label">التصنيفات:</span>
+      <a class="chip {% if not selected_category %}active{% endif %}" href="/?view=electronics">الكل</a>
+      {% for c in categories %}
+        <a class="chip {% if selected_category == c.id|stringformat:'s' %}active{% endif %}" href="/?view=electronics&category={{ c.id }}">{{ c.name }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% block content %}{% endblock %}
+
+  <footer class="footer">
+    <div class="container-wide d-flex justify-content-between gap-3 flex-wrap">
+      <div>
+        <strong>{{ settings.site_name|default:"مركز آي تي للتطوير والتدريب" }}</strong>
+        <div>{{ settings.address|default:"" }}</div>
+      </div>
+      <div>طلبات، OTP، دفع عند الاستلام، وربط دفع إلكتروني عند توفر البوابة.</div>
+    </div>
+  </footer>
+  <div class="toast-note" id="cart-toast">
+    <span class="tick">✓</span><span id="cart-toast-msg">تمت الإضافة إلى السلة</span>
+  </div>
+
+  <script>
+    // إضافة للسلة دون مغادرة الصفحة
+    document.addEventListener('submit', function (e) {
+      const form = e.target.closest('form.add-to-cart');
+      if (!form) return;
+      e.preventDefault();
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+      fetch(form.action, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: new FormData(form),
+        credentials: 'same-origin'
+      })
+        .then(r => r.json())
+        .then(d => {
+          if (d.status === 'ok') {
+            const cc = document.getElementById('cart-count');
+            if (cc) { cc.textContent = d.cart_count; cc.hidden = false; }
+            showCartToast('تمت إضافة « ' + d.product_name + ' » إلى السلة');
+          }
+          if (btn) btn.disabled = false;
+        })
+        .catch(() => { form.submit(); });
+    });
+
+    function showCartToast(msg) {
+      const t = document.getElementById('cart-toast');
+      if (!t) return;
+      document.getElementById('cart-toast-msg').textContent = msg;
+      t.classList.add('show');
+      clearTimeout(window.__cartToastTimer);
+      window.__cartToastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+    }
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

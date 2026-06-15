@@ -1,0 +1,52 @@
+{% extends 'store/base.html' %}
+{% load store_extras %}
+{% block title %}السلة | {{ settings.site_name }}{% endblock %}
+{% block extra_css %}
+<style>
+  .cart-layout { display: grid; grid-template-columns: 1fr 340px; gap: 18px; margin-top: 24px; }
+  .cart-item { display: grid; grid-template-columns: 110px 1fr 130px; gap: 16px; padding: 16px; border-bottom: 1px solid var(--line); }
+  .cart-img { width: 110px; aspect-ratio: 1; border-radius: 8px; background: linear-gradient(135deg,#eaf2ff,#fff1dc); display:grid; place-items:center; font-weight:900; color:var(--blue); overflow:hidden; }
+  .cart-img img { width:100%; height:100%; object-fit:cover; }
+  .qty { border:1px solid var(--line); border-radius:8px; padding:8px; width:90px; }
+  @media (max-width: 900px) { .cart-layout { grid-template-columns: 1fr; } .cart-item { grid-template-columns: 80px 1fr; } .cart-actions { grid-column: 1 / -1; } }
+</style>
+{% endblock %}
+{% block content %}
+<main class="container-wide">
+  <h2 class="fw-bold mt-4">سلة التسوق</h2>
+  <div class="cart-layout">
+    <section class="panel">
+      {% for item in items %}
+        <div class="cart-item">
+          <a class="cart-img" href="{% url 'product_detail' item.product.id %}">
+            {% if item.product.image %}<img src="{{ item.product.image.url }}" alt="{{ item.product.name }}">{% else %}{{ item.product.name|first|upper }}{% endif %}
+          </a>
+          <div>
+            <a class="fw-bold" href="{% url 'product_detail' item.product.id %}">{{ item.product.name }}</a>
+            <div class="text-muted mt-1">SKU: {{ item.product.sku }}</div>
+            <div class="fw-bold mt-2">{{ item.product.sell_price|money }} د.ع</div>
+            <a class="text-danger small d-inline-block mt-2" href="{% url 'cart_remove' item.product.id %}">حذف</a>
+          </div>
+          <div class="cart-actions">
+            <form method="post" action="{% url 'cart_update' item.product.id %}">
+              {% csrf_token %}
+              <label class="small text-muted">الكمية</label>
+              <input class="qty d-block mb-2" type="number" min="0" name="qty" value="{{ item.qty }}">
+              <button class="btn btn-outline-primary btn-sm" type="submit">تحديث</button>
+            </form>
+            <div class="fw-bold mt-3">{{ item.line_total|money }} د.ع</div>
+          </div>
+        </div>
+      {% empty %}
+        <div class="p-4 text-muted">السلة فارغة حالياً.</div>
+      {% endfor %}
+    </section>
+    <aside class="panel p-3 h-100">
+      <h5 class="fw-bold">ملخص الطلب</h5>
+      <div class="d-flex justify-content-between my-3"><span>المجموع</span><strong>{{ total|money }} د.ع</strong></div>
+      <a class="btn btn-orange w-100 py-3 {% if not items %}disabled{% endif %}" href="{% url 'checkout_phone' %}">إكمال الشراء</a>
+      <a class="btn btn-outline-secondary w-100 mt-2" href="/">متابعة التسوق</a>
+    </aside>
+  </div>
+</main>
+{% endblock %}
