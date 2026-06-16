@@ -1,6 +1,115 @@
 import random
+import re
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.http import JsonResponse
+from django.utils import timezone
+
+
+def _normalize_iraqi_phone(phone):
+    """يحوّل الرقم لصيغة otpiq: 964 + الرقم بلا صفر بادئ. مثال 07815453320 -> 9647815453320"""
+    digits = re.sub(r'\D', '', phone or '')
+    if digits.startswith('00964'):
+        digits = digits[5:]
+    elif digits.startswith('964'):
+        digits = digits[3:]
+    if digits.startswith('0'):
+        digits = digits[1:]
+    return '964' + digits
+
+
+def _send_otp_sms(phone, code):
+    """يرسل رمز التحقق عبر otpiq. يُرجع (نجاح:bool، تفصيل:str)."""
+    if not getattr(settings, 'OTPIQ_API_KEY', ''):
+        return False, 'لا يوجد OTPIQ_API_KEY'
+    try:
+        import requests
+        resp = requests.post(
+            'https://api.otpiq.com/api/sms',
+            headers={
+                'Authorization': 'Bearer ' + settings.OTPIQ_API_KEY,
+                'Content-Type': 'application/json',
+            },
+            json={
+                'phoneNumber': _normalize_iraqi_phone(phone),
+                'smsType': 'verification',
+                'verificationCode': str(code),
+                'provider': getattr(settings, 'OTPIQ_PROVIDER', 'sms'),
+            },
+            timeout=15,
+        )
+        if 200 <= resp.status_code < 300:
+            return True, ''
+        detail = f'otpiq {resp.status_code}: {resp.text[:400]}'
+        print(detail)
+        return False, detail
+    except Exception as e:
+        detail = f'otpiq خطأ اتصال: {e}'
+        print(detail)
+        return False, detail
+
+
+def _valid_iraqi_phone(phone):
+    """رقم موبايل عراقي صحيح: بعد المفتاح 964 يكون 10 أرقام تبدأ بـ7."""
+    d = re.sub(r'\D', '', phone or '')
+    if d.startswith('00964'):
+        d = d[5:]
+    elif d.startswith('964'):
+        d = d[3:]
+    if d.startswith('0'):
+        d = d[1:]
+    return len(d) == 10 and d[0] == '7'
+
+
+def _phone_display(norm):
+    """9647815453320 -> 07815453320 للعرض."""
+    d = re.sub(r'\D', '', norm or '')
+    if d.startswith('964'):
+        d = d[3:]
+    return '0' + d if d else ''
+
+
+def _start_otp(request, phone, next_target, payment_method=None):
+    """ينشئ رمزاً ويرسله ويضبط جلسة OTP. phone بصيغة 964..."""
+    code = f"{random.randint(100000, 999999)}"
+    PhoneOTP.objects.filter(phone=phone, is_used=False).update(is_used=True)
+    PhoneOTP.objects.create(phone=phone, code=code)
+    request.session['otp_phone'] = phone
+    request.session['otp_next'] = next_target
+    if payment_method is not None:
+        request.session['otp_payment'] = payment_method
+    sms_sent, detail = _send_otp_sms(phone, code)
+    request.session['dev_otp_code'] = code if (settings.SHOW_OTP and not sms_sent) else ''
+    request.session['otp_sms_sent'] = sms_sent
+    request.session['otp_error'] = '' if sms_sent else detail
+
+
+def _login_customer(request, phone):
+    """يحفظ تسجيل دخول الزبون لمدة شهر (لا يحتاج OTP عند كل زيارة)."""
+    request.session['customer_phone'] = phone
+    request.session.set_expiry(60 * 60 * 24 * 30)  # 30 يوماً
+
+
+OTP_COOLDOWN = 60        # ثانية بين كل إرسال وآخر
+OTP_MAX_PER_HOUR = 3     # أقصى عدد رسائل في الساعة
+
+
+def _otp_wait_seconds(phone):
+    """الثواني الواجب انتظارها قبل السماح بإرسال جديد (0 = مسموح الآن)."""
+    now = timezone.now()
+    last = PhoneOTP.objects.filter(phone=phone).order_by('-created_at').first()
+    cooldown = 0
+    if last:
+        elapsed = (now - last.created_at).total_seconds()
+        if elapsed < OTP_COOLDOWN:
+            cooldown = int(OTP_COOLDOWN - elapsed) + 1
+    hourly = 0
+    hour_qs = PhoneOTP.objects.filter(phone=phone, created_at__gte=now - timezone.timedelta(hours=1))
+    if hour_qs.count() >= OTP_MAX_PER_HOUR:
+        oldest = hour_qs.order_by('created_at').first()
+        if oldest:
+            hourly = int(3600 - (now - oldest.created_at).total_seconds()) + 1
+    return max(0, cooldown, hourly)
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -193,7 +302,46 @@ def about(request):
 
 def account(request):
     context = _base_context(request)
+    phone = request.session.get('customer_phone')
+    if phone:
+        customer = Customer.objects.filter(phone=phone).first()
+        orders = Order.objects.filter(phone=phone).order_by('-created_at')[:20]
+        context.update({
+            'logged_in': True,
+            'phone_display': _phone_display(phone),
+            'customer': customer,
+            'orders': orders,
+        })
+        return render(request, 'store/account.html', context)
+
+    if request.method == 'POST':
+        raw = request.POST.get('phone', '').strip()
+        full_name = request.POST.get('full_name', '').strip()
+        if len(full_name.split()) < 3:
+            context['error'] = 'اكتب اسمك الثلاثي كاملاً (الاسم واسم الأب والجد).'
+        elif not _valid_iraqi_phone(raw):
+            context['error'] = 'أدخل رقم هاتف عراقي صحيح (10 أرقام تبدأ بـ7).'
+        else:
+            phone = _normalize_iraqi_phone(raw)
+            wait = _otp_wait_seconds(phone)
+            if wait > 0:
+                context['error'] = f'لقد طلبت رمزاً مؤخراً. حاول بعد {wait} ثانية (بحد أقصى 3 رسائل في الساعة).'
+            else:
+                request.session['otp_full_name'] = full_name
+                _start_otp(request, phone, 'account')
+                return redirect('checkout_otp')
+        context['form_phone'] = raw
+        context['form_name'] = full_name
+    context['logged_in'] = False
     return render(request, 'store/account.html', context)
+
+
+def account_logout(request):
+    for k in ('customer_phone', 'otp_phone', 'otp_next', 'otp_payment',
+              'otp_verified', 'dev_otp_code', 'otp_sms_sent'):
+        request.session.pop(k, None)
+    request.session.modified = True
+    return redirect('account')
 
 
 @require_POST
@@ -248,40 +396,73 @@ def checkout_phone(request):
     if not items:
         return redirect('cart')
     context = _base_context(request)
-    context.update({'items': items, 'total': total})
+    logged_phone = request.session.get('customer_phone')
+    context.update({'items': items, 'total': total, 'logged_phone': logged_phone,
+                    'logged_phone_display': _phone_display(logged_phone) if logged_phone else ''})
     if request.method == 'POST':
-        phone = request.POST.get('phone', '').strip()
+        raw = request.POST.get('phone', '').strip()
         payment_method = request.POST.get('payment_method', 'cod')
-        if phone:
-            code = f"{random.randint(100000, 999999)}"
-            PhoneOTP.objects.filter(phone=phone, is_used=False).update(is_used=True)
-            PhoneOTP.objects.create(phone=phone, code=code)
-            request.session['checkout_phone'] = phone
-            request.session['payment_method'] = payment_method
-            # حل مؤقت: نعرض الرمز على الشاشة فقط عند تفعيل SHOW_OTP (بلا بوابة SMS)
-            from django.conf import settings as _s
-            request.session['dev_otp_code'] = code if getattr(_s, 'SHOW_OTP', True) else ''
-            return redirect('checkout_otp')
-        context['error'] = 'اكتب رقم الهاتف.'
+        if not _valid_iraqi_phone(raw):
+            context['error'] = 'أدخل رقم هاتف عراقي صحيح (10 أرقام تبدأ بـ7).'
+            return render(request, 'store/checkout_phone.html', context)
+        phone = _normalize_iraqi_phone(raw)
+        request.session['otp_payment'] = payment_method
+        # مسجّل خلال شهر بنفس الرقم؟ تجاوز OTP مباشرة
+        if logged_phone and logged_phone == phone:
+            request.session['otp_phone'] = phone
+            request.session['otp_verified'] = True
+            return redirect('checkout_details')
+        wait = _otp_wait_seconds(phone)
+        if wait > 0:
+            context['error'] = f'لقد طلبت رمزاً مؤخراً. حاول بعد {wait} ثانية (بحد أقصى 3 رسائل في الساعة).'
+            return render(request, 'store/checkout_phone.html', context)
+        _start_otp(request, phone, 'checkout', payment_method)
+        return redirect('checkout_otp')
     return render(request, 'store/checkout_phone.html', context)
 
 
 def checkout_otp(request):
-    phone = request.session.get('checkout_phone')
+    phone = request.session.get('otp_phone')
     if not phone:
-        return redirect('checkout_phone')
+        return redirect('account')
     context = _base_context(request)
-    context.update({'phone': phone, 'dev_otp_code': request.session.get('dev_otp_code')})
+    context.update({
+        'phone': _phone_display(phone),
+        'dev_otp_code': request.session.get('dev_otp_code'),
+        'otp_sms_sent': request.session.get('otp_sms_sent', False),
+        'otp_error': request.session.get('otp_error', '') if settings.DEBUG or settings.SHOW_OTP else '',
+        'resend_after': _otp_wait_seconds(phone),
+    })
     if request.method == 'POST':
         code = request.POST.get('code', '').strip()
         otp = PhoneOTP.objects.filter(phone=phone, code=code, is_used=False).order_by('-created_at').first()
         if otp and otp.is_valid():
             otp.is_used = True
             otp.save(update_fields=['is_used'])
-            request.session['otp_verified'] = True
-            return redirect('checkout_details')
+            _login_customer(request, phone)   # تسجيل دخول لمدة شهر
+            if request.session.get('otp_next') == 'checkout':
+                request.session['otp_verified'] = True
+                return redirect('checkout_details')
+            # تسجيل/تحديث بيانات الزبون بالاسم الثلاثي
+            full_name = request.session.pop('otp_full_name', '')
+            cust, _ = Customer.objects.get_or_create(phone=phone)
+            if full_name:
+                cust.full_name = full_name
+                cust.save(update_fields=['full_name'])
+            return redirect('account')
         context['error'] = 'رمز التحقق غير صحيح أو منتهي.'
     return render(request, 'store/checkout_otp.html', context)
+
+
+@require_POST
+def resend_otp(request):
+    phone = request.session.get('otp_phone')
+    if not phone:
+        return redirect('account')
+    if _otp_wait_seconds(phone) <= 0:
+        _start_otp(request, phone, request.session.get('otp_next', 'account'),
+                   request.session.get('otp_payment'))
+    return redirect('checkout_otp')
 
 
 def checkout_details(request):
@@ -291,23 +472,23 @@ def checkout_details(request):
     if not items:
         return redirect('cart')
 
-    phone = request.session.get('checkout_phone')
+    phone = request.session.get('otp_phone')
     customer = Customer.objects.filter(phone=phone).first()
     context = _base_context(request)
     context.update({
         'items': items,
         'total': total,
-        'phone': phone,
+        'phone': _phone_display(phone),
         'customer': customer,
         'provinces': PROVINCES,
-        'payment_method': request.session.get('payment_method', 'cod'),
+        'payment_method': request.session.get('otp_payment', 'cod'),
     })
 
     if request.method == 'POST':
         full_name = request.POST.get('full_name', '').strip()
         province = request.POST.get('province', '').strip()
         address = request.POST.get('address', '').strip()
-        payment_method = request.session.get('payment_method', 'cod')
+        payment_method = request.session.get('otp_payment', 'cod')
         if not full_name or not province or not address:
             context['error'] = 'أكمل الاسم والمحافظة والعنوان.'
             return render(request, 'store/checkout_details.html', context)
@@ -344,7 +525,8 @@ def checkout_details(request):
 
         request.session['cart'] = {}
         request.session['last_order_id'] = order.id
-        for key in ('checkout_phone', 'payment_method', 'otp_verified', 'dev_otp_code'):
+        # ننظّف مفاتيح OTP المؤقتة فقط؛ نُبقي customer_phone (تسجيل الدخول لشهر)
+        for key in ('otp_phone', 'otp_payment', 'otp_next', 'otp_verified', 'dev_otp_code', 'otp_sms_sent'):
             request.session.pop(key, None)
         request.session.modified = True
 

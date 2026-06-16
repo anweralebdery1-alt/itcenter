@@ -3,17 +3,51 @@
 {% block content %}
 <main class="container-wide">
   <div class="panel p-4 mt-4" style="max-width:620px">
-    <h3 class="fw-bold">أدخل رمز OTP</h3>
-    <p class="text-muted">تم إنشاء رمز تحقق للرقم {{ phone }}.</p>
+    <h3 class="fw-bold">أدخل رمز التحقق</h3>
+    {% if otp_sms_sent %}
+      <p class="text-muted">أرسلنا رمز التحقق إلى رقمك <strong>{{ phone }}</strong> عبر رسالة. أدخله للمتابعة.</p>
+    {% else %}
+      <p class="text-muted">تم إنشاء رمز تحقق للرقم {{ phone }}.</p>
+    {% endif %}
     {% if dev_otp_code %}
-      <div class="alert alert-warning">رمزك المؤقت: <strong style="font-size:20px;letter-spacing:3px">{{ dev_otp_code }}</strong><br>الرمز مُدخَل تلقائياً، اضغط «تأكيد». عند ربط SMS حقيقي لن يظهر الرمز هنا.</div>
+      <div class="alert alert-warning">رمزك: <strong style="font-size:20px;letter-spacing:3px">{{ dev_otp_code }}</strong><br>الرمز مُدخَل تلقائياً، اضغط «تأكيد».</div>
+    {% endif %}
+    {% if otp_error %}
+      <div class="alert alert-danger small" dir="ltr" style="word-break:break-all">سبب عدم الإرسال: {{ otp_error }}</div>
     {% endif %}
     {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
     <form method="post">
       {% csrf_token %}
-      <input class="form-control form-control-lg mb-3" name="code" maxlength="6" placeholder="رمز من 6 أرقام" value="{{ dev_otp_code }}" required>
+      <input class="form-control form-control-lg mb-3" name="code" inputmode="numeric" maxlength="6" placeholder="رمز من 6 أرقام" value="{{ dev_otp_code }}" required>
       <button class="btn btn-orange btn-lg px-5" type="submit">تأكيد الرمز</button>
     </form>
+
+    <hr class="my-3">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <form method="post" action="{% url 'resend_otp' %}" class="m-0">
+        {% csrf_token %}
+        <button id="resendBtn" class="btn btn-outline-primary" type="submit">إعادة إرسال الرمز</button>
+      </form>
+      <small id="resendNote" class="text-muted"></small>
+    </div>
   </div>
 </main>
+<script>
+  (function () {
+    var after = parseInt("{{ resend_after|default:0 }}", 10) || 0;
+    var btn = document.getElementById('resendBtn');
+    var note = document.getElementById('resendNote');
+    function fmt(s) {
+      if (s >= 60) { var m = Math.floor(s / 60), x = s % 60; return m + ':' + (x < 10 ? '0' + x : x) + ' دقيقة'; }
+      return s + ' ثانية';
+    }
+    function tick() {
+      if (after <= 0) { btn.disabled = false; note.textContent = ''; return; }
+      btn.disabled = true;
+      note.textContent = 'يمكنك إعادة الإرسال بعد ' + fmt(after);
+      after--; setTimeout(tick, 1000);
+    }
+    tick();
+  })();
+</script>
 {% endblock %}

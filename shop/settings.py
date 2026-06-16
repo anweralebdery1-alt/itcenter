@@ -10,6 +10,11 @@ allowed_hosts = os.environ.get('ALLOWED_HOSTS', '127.0.0.1,localhost')
 ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
 if DEBUG and '*' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append('*')
+
+# مصادر موثوقة لإرسال النماذج (POST) عبر HTTPS على الدومين الفعلي
+CSRF_TRUSTED_ORIGINS = [
+    'https://' + h for h in ALLOWED_HOSTS if h not in ('*', '127.0.0.1', 'localhost')
+]
 INSTALLED_APPS = [
     'django.contrib.admin','django.contrib.auth','django.contrib.contenttypes','django.contrib.sessions',
     'django.contrib.messages','django.contrib.staticfiles','django.contrib.humanize','rest_framework','store',
@@ -59,5 +64,10 @@ REST_FRAMEWORK = {'DEFAULT_PERMISSION_CLASSES':['rest_framework.permissions.Allo
 SYNC_API_TOKEN = os.environ.get('SYNC_API_TOKEN','changeme_token')
 
 # حل مؤقت لرمز OTP (بلا بوابة SMS): يُعرض الرمز على الشاشة ويُملأ تلقائياً.
-# عند ربط SMS حقيقي لاحقاً: اضبط SHOW_OTP=False في متغيّرات البيئة.
+# عند تفعيل otpiq سيُرسَل عبر SMS/واتساب ولن يظهر على الشاشة.
 SHOW_OTP = os.environ.get('SHOW_OTP', 'True').lower() in ('1', 'true', 'yes', 'on')
+
+# تكامل otpiq (خدمة OTP عراقية): ضع المفتاح في متغيّر البيئة OTPIQ_API_KEY
+OTPIQ_API_KEY = os.environ.get('OTPIQ_API_KEY', '')
+# المزوّد: sms (رصيد SMS) | whatsapp-telegram-sms | auto ...
+OTPIQ_PROVIDER = os.environ.get('OTPIQ_PROVIDER', 'sms')

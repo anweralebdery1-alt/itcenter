@@ -1,14 +1,60 @@
 {% extends 'store/base.html' %}
-{% block title %}حساب الزبون | {{ settings.site_name }}{% endblock %}
+{% load store_extras %}
+{% block title %}حسابي | {{ settings.site_name }}{% endblock %}
 {% block content %}
 <main class="container-wide">
-  <div class="panel p-4 mt-4" style="max-width:720px">
-    <h2 class="fw-bold">حساب الزبون</h2>
-    <p class="text-muted">
-      حالياً يتم إنشاء حساب الزبون تلقائياً أثناء الشراء بعد تأكيد رقم الهاتف برمز OTP.
-      لاحقاً يمكن إضافة صفحة دخول كاملة تعرض الطلبات السابقة والعناوين.
-    </p>
-    <a class="btn btn-orange px-4" href="{% url 'checkout_phone' %}">تسجيل/تأكيد رقم الهاتف أثناء الشراء</a>
+  <div class="panel p-4 mt-4" style="max-width:760px">
+
+    {% if logged_in %}
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h2 class="fw-bold m-0">مرحباً 👋</h2>
+        <a class="btn btn-outline-primary btn-sm" href="{% url 'account_logout' %}">تسجيل الخروج</a>
+      </div>
+      <div class="text-muted mt-1">رقم هاتفك: <strong dir="ltr">{{ phone_display }}</strong></div>
+      {% if customer.full_name %}<div class="text-muted">الاسم: {{ customer.full_name }}</div>{% endif %}
+      {% if customer.province %}<div class="text-muted">المحافظة: {{ customer.province }}</div>{% endif %}
+
+      <h4 class="fw-bold mt-4">طلباتك السابقة</h4>
+      {% if orders %}
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead><tr><th>رقم الطلب</th><th>التاريخ</th><th>الإجمالي</th><th>الحالة</th></tr></thead>
+            <tbody>
+              {% for o in orders %}
+                <tr>
+                  <td>#{{ o.id }}</td>
+                  <td>{{ o.created_at|date:"Y-m-d" }}</td>
+                  <td>{{ o.total|money }} د.ع</td>
+                  <td>{{ o.get_status_display }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">لا توجد طلبات سابقة بعد.</div>
+      {% endif %}
+
+    {% else %}
+      <h2 class="fw-bold">تسجيل الدخول</h2>
+      <p class="text-muted">أدخل رقم هاتفك ويصلك رمز تحقق على واتساب. يبقى حسابك مسجّلاً لمدة شهر.</p>
+      {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+      <form method="post" class="phone-form mt-3">
+        {% csrf_token %}
+        <label class="form-label fw-bold">الاسم الثلاثي</label>
+        <input type="text" name="full_name" class="form-control form-control-lg mb-3"
+               placeholder="الاسم واسم الأب واسم الجد" value="{{ form_name|default:'' }}" required>
+        <label class="form-label fw-bold">رقم الهاتف</label>
+        <div class="phone-field">
+          <span class="phone-cc"><span class="flag">🇮🇶</span> +964</span>
+          <input type="tel" name="phone" class="phone-input" dir="ltr" inputmode="numeric"
+                 placeholder="07XX XXX XXXX" maxlength="13" value="{{ form_phone|default:'' }}" required>
+        </div>
+        <small class="text-muted d-block mt-1">سيصلك رمز التحقق برسالة نصية 📩</small>
+        <button class="btn btn-orange px-5 mt-3" type="submit">إرسال الرمز</button>
+      </form>
+    {% endif %}
+
   </div>
 </main>
 {% endblock %}

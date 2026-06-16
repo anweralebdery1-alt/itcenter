@@ -154,7 +154,6 @@
   <div class="toolbar" id="products">
     <div>
       <h2 class="m-0 fw-bold"><span class="section-tag"></span>{% if search %}نتائج البحث عن "{{ search }}"{% elif sort == 'best' %}الأكثر مبيعاً{% elif sort == 'popular' %}الأكثر طلباً{% elif sort == 'offers' %}العروض الخاصة{% else %}كل المنتجات{% endif %}</h2>
-      <div class="text-muted mt-1">عرض المنتجات مع السلة والطلب والتحقق من الهاتف.</div>
     </div>
     <form method="get" class="d-flex gap-2 flex-wrap">
       {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
@@ -205,7 +204,7 @@
         </div>
       </div>
     {% empty %}
-      <div class="empty-state">لا توجد منتجات حالياً. شغل المزامنة أو أضف منتجات من لوحة الإدارة.</div>
+      <div class="empty-state">لا توجد منتجات متاحة حالياً.</div>
     {% endfor %}
 
     {% comment %} الدورات المتوفرة تظهر ضمن المنتجات كبطاقات {% endcomment %}

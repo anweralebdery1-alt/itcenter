@@ -7,12 +7,22 @@
     <div class="col-lg-7">
       <div class="panel p-4">
         <h3 class="fw-bold">تأكيد رقم الهاتف</h3>
-        <p class="text-muted">سنرسل رمز OTP للتحقق من رقمك قبل إنشاء الطلب.</p>
+        {% if logged_phone %}
+          <p class="text-muted">أنت مسجّل برقم <strong dir="ltr">{{ logged_phone_display }}</strong> — أكمل مباشرة.</p>
+        {% else %}
+          <p class="text-muted">أدخل رقم هاتفك ويصلك رمز تحقق برسالة نصية لتأكيد الطلب.</p>
+        {% endif %}
         {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
-        <form method="post">
+        <form method="post" class="phone-form">
           {% csrf_token %}
-          <label class="form-label">رقم الهاتف</label>
-          <input class="form-control form-control-lg mb-3" name="phone" placeholder="07xxxxxxxxx" required>
+          <label class="form-label fw-bold">رقم الهاتف</label>
+          <div class="phone-field mb-1">
+            <span class="phone-cc"><span class="flag">🇮🇶</span> +964</span>
+            <input type="tel" name="phone" class="phone-input" dir="ltr" inputmode="numeric"
+                   placeholder="07XX XXX XXXX" maxlength="13"
+                   value="{% if logged_phone %}{{ logged_phone_display }}{% endif %}" required>
+          </div>
+          <small class="text-muted d-block mb-3">سيصلك رمز التحقق برسالة نصية 📩</small>
           <label class="form-label">طريقة الدفع</label>
           <div class="d-grid gap-2 mb-3">
             <label class="panel p-3"><input type="radio" name="payment_method" value="cod" checked> الدفع عند الاستلام</label>
