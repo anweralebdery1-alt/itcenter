@@ -12,9 +12,11 @@ if DEBUG and '*' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append('*')
 
 # مصادر موثوقة لإرسال النماذج (POST) عبر HTTPS على الدومين الفعلي
-CSRF_TRUSTED_ORIGINS = [
-    'https://' + h for h in ALLOWED_HOSTS if h not in ('*', '127.0.0.1', 'localhost')
-]
+CSRF_TRUSTED_ORIGINS = []
+for _h in ALLOWED_HOSTS:
+    if _h in ('*', '127.0.0.1', 'localhost'):
+        continue
+    CSRF_TRUSTED_ORIGINS.append('https://*' + _h if _h.startswith('.') else 'https://' + _h)
 INSTALLED_APPS = [
     'django.contrib.admin','django.contrib.auth','django.contrib.contenttypes','django.contrib.sessions',
     'django.contrib.messages','django.contrib.staticfiles','django.contrib.humanize','rest_framework','store',
