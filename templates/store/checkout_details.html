@@ -9,24 +9,43 @@
         <h3 class="fw-bold">بيانات التوصيل</h3>
         <p class="text-muted">رقم الهاتف مؤكد: {{ phone }}</p>
         {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
-        <form method="post">
-          {% csrf_token %}
-          <label class="form-label">الاسم الكامل</label>
-          <input class="form-control form-control-lg mb-3" name="full_name" value="{{ customer.full_name|default:'' }}" required>
-          <label class="form-label">المحافظة</label>
-          <select class="form-control form-control-lg mb-3" name="province" required>
-            <option value="">اختر المحافظة</option>
-            {% for p in provinces %}
-              <option value="{{ p }}" {% if customer.province == p %}selected{% endif %}>{{ p }}</option>
-            {% endfor %}
-          </select>
-          <label class="form-label">العنوان التفصيلي</label>
-          <textarea class="form-control mb-3" name="address" rows="4" required>{{ customer.address|default:'' }}</textarea>
+        {% if profile_complete and not editing_address %}
+          <div class="panel p-3 mb-3">
+            <div class="fw-bold mb-2">عنوان التوصيل</div>
+            <div>{{ customer.full_name }}</div>
+            <div>{{ customer.province }}</div>
+            <div class="text-muted">{{ customer.address }}</div>
+            <a class="btn btn-outline-primary btn-sm mt-3" href="?edit=1">تغيير العنوان</a>
+          </div>
           <div class="alert alert-info">
             طريقة الدفع: {% if payment_method == 'card' %}دفع إلكتروني{% else %}الدفع عند الاستلام{% endif %}
           </div>
-          <button class="btn btn-orange btn-lg px-5" type="submit">تسجيل الطلب</button>
-        </form>
+          <form method="post">
+            {% csrf_token %}
+            <button class="btn btn-orange btn-lg px-5" type="submit">إكمال الشراء</button>
+          </form>
+        {% else %}
+          <form method="post">
+            {% csrf_token %}
+            <label class="form-label">الاسم الثلاثي</label>
+            <input class="form-control form-control-lg mb-3" name="full_name"
+                   value="{{ customer.full_name|default:'' }}"
+                   placeholder="الاسم واسم الأب واسم الجد" required>
+            <label class="form-label">المحافظة</label>
+            <select class="form-control form-control-lg mb-3" name="province" required>
+              <option value="">اختر المحافظة</option>
+              {% for p in provinces %}
+                <option value="{{ p }}" {% if customer.province == p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+            <label class="form-label">العنوان التفصيلي</label>
+            <textarea class="form-control mb-3" name="address" rows="4" required>{{ customer.address|default:'' }}</textarea>
+            <div class="alert alert-info">
+              طريقة الدفع: {% if payment_method == 'card' %}دفع إلكتروني{% else %}الدفع عند الاستلام{% endif %}
+            </div>
+            <button class="btn btn-orange btn-lg px-5" type="submit">حفظ العنوان وإكمال الشراء</button>
+          </form>
+        {% endif %}
       </div>
     </div>
     <div class="col-lg-5">

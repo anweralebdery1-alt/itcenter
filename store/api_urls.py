@@ -7,5 +7,6 @@ urlpatterns = [
     path('sync/push/', api_views.sync_push, name='api_sync_push'),
     path('sync/pull/', api_views.sync_pull, name='api_sync_pull'),
     path('stock_snapshot/', api_views.stock_snapshot, name='api_stock_snapshot'),
+    path('orders/pending_count/', api_views.pending_orders_count, name='api_pending_orders_count'),
     path('stock_update/', api_views.stock_update, name='api_stock_update'),
 ]

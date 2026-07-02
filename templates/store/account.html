@@ -13,6 +13,8 @@
       <div class="text-muted mt-1">رقم هاتفك: <strong dir="ltr">{{ phone_display }}</strong></div>
       {% if customer.full_name %}<div class="text-muted">الاسم: {{ customer.full_name }}</div>{% endif %}
       {% if customer.province %}<div class="text-muted">المحافظة: {{ customer.province }}</div>{% endif %}
+      {% if customer.address %}<div class="text-muted">العنوان: {{ customer.address }}</div>{% endif %}
+      <a class="btn btn-orange btn-sm mt-3" href="{% url 'account_details' %}">تعديل بياناتي وعنواني</a>
 
       <h4 class="fw-bold mt-4">طلباتك السابقة</h4>
       {% if orders %}
@@ -37,13 +39,10 @@
 
     {% else %}
       <h2 class="fw-bold">تسجيل الدخول</h2>
-      <p class="text-muted">أدخل رقم هاتفك ويصلك رمز تحقق على واتساب. يبقى حسابك مسجّلاً لمدة شهر.</p>
+      <p class="text-muted">أدخل رقم هاتفك فقط، وسيصلك رمز تحقق. بعد التحقق يمكنك تعديل اسمك وعنوانك.</p>
       {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
       <form method="post" class="phone-form mt-3">
         {% csrf_token %}
-        <label class="form-label fw-bold">الاسم الثلاثي</label>
-        <input type="text" name="full_name" class="form-control form-control-lg mb-3"
-               placeholder="الاسم واسم الأب واسم الجد" value="{{ form_name|default:'' }}" required>
         <label class="form-label fw-bold">رقم الهاتف</label>
         <div class="phone-field">
           <span class="phone-cc"><span class="flag">🇮🇶</span> +964</span>

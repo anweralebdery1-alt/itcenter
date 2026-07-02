@@ -25,7 +25,10 @@
             <a class="fw-bold" href="{% url 'product_detail' item.product.id %}">{{ item.product.name }}</a>
             <div class="text-muted mt-1">SKU: {{ item.product.sku }}</div>
             <div class="fw-bold mt-2">{{ item.product.sell_price|money }} د.ع</div>
-            <a class="text-danger small d-inline-block mt-2" href="{% url 'cart_remove' item.product.id %}">حذف</a>
+            <form method="post" action="{% url 'cart_remove' item.product.id %}" class="mt-2">
+              {% csrf_token %}
+              <button class="btn btn-link text-danger small p-0" type="submit">حذف</button>
+            </form>
           </div>
           <div class="cart-actions">
             <form method="post" action="{% url 'cart_update' item.product.id %}">

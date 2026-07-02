@@ -1,5 +1,5 @@
-import random
 import re
+import secrets
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.http import JsonResponse
@@ -24,19 +24,23 @@ def _send_otp_sms(phone, code):
         return False, 'لا يوجد OTPIQ_API_KEY'
     try:
         import requests
+        payload = {
+            'phoneNumber': _normalize_iraqi_phone(phone),
+            'smsType': 'verification',
+            'verificationCode': str(code),
+            'provider': getattr(settings, 'OTPIQ_PROVIDER', 'sms'),
+        }
+        sender_id = getattr(settings, 'OTPIQ_SENDER_ID', '')
+        if sender_id:
+            payload['senderId'] = sender_id
         resp = requests.post(
-            'https://api.otpiq.com/api/sms',
+            getattr(settings, 'OTPIQ_API_URL', 'https://api.otpiq.com/api/sms'),
             headers={
                 'Authorization': 'Bearer ' + settings.OTPIQ_API_KEY,
                 'Content-Type': 'application/json',
             },
-            json={
-                'phoneNumber': _normalize_iraqi_phone(phone),
-                'smsType': 'verification',
-                'verificationCode': str(code),
-                'provider': getattr(settings, 'OTPIQ_PROVIDER', 'sms'),
-            },
-            timeout=15,
+            json=payload,
+            timeout=getattr(settings, 'OTPIQ_TIMEOUT', 15),
         )
         if 200 <= resp.status_code < 300:
             return True, ''
@@ -71,7 +75,7 @@ def _phone_display(norm):
 
 def _start_otp(request, phone, next_target, payment_method=None):
     """ينشئ رمزاً ويرسله ويضبط جلسة OTP. phone بصيغة 964..."""
-    code = f"{random.randint(100000, 999999)}"
+    code = f"{secrets.randbelow(900000) + 100000:06d}"
     PhoneOTP.objects.filter(phone=phone, is_used=False).update(is_used=True)
     PhoneOTP.objects.create(phone=phone, code=code)
     request.session['otp_phone'] = phone
@@ -82,6 +86,9 @@ def _start_otp(request, phone, next_target, payment_method=None):
     request.session['dev_otp_code'] = code if (settings.SHOW_OTP and not sms_sent) else ''
     request.session['otp_sms_sent'] = sms_sent
     request.session['otp_error'] = '' if sms_sent else detail
+    if not sms_sent and not settings.SHOW_OTP:
+        PhoneOTP.objects.filter(phone=phone, code=code, is_used=False).update(is_used=True)
+    return sms_sent
 
 
 def _login_customer(request, phone):
@@ -112,6 +119,7 @@ def _otp_wait_seconds(phone):
     return max(0, cooldown, hourly)
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from .models import (
     Category,
@@ -169,7 +177,12 @@ def _cart_count(request):
 
 def _cart_items(request):
     cart = request.session.get('cart', {})
-    product_ids = [int(pid) for pid in cart.keys()]
+    product_ids = []
+    for pid in cart.keys():
+        try:
+            product_ids.append(int(pid))
+        except (TypeError, ValueError):
+            continue
     products = Product.objects.filter(id__in=product_ids)
     products_by_id = {str(p.id): p for p in products}
     items = []
@@ -251,7 +264,10 @@ def home(request):
 
 
 def product_detail(request, pk):
-    product = get_object_or_404(Product, pk=pk)
+    product = get_object_or_404(
+        Product.objects.prefetch_related('gallery_images'),
+        pk=pk,
+    )
     _remember_product(request, product.id)
     if product.series:
         similar = Product.objects.filter(series=product.series).exclude(pk=product.pk)[:6]
@@ -260,7 +276,12 @@ def product_detail(request, pk):
     else:
         similar = Product.objects.exclude(pk=product.pk).order_by('-created_at')[:6]
     context = _base_context(request)
-    context.update({'product': product, 'similar': similar, 'visited_products': _visited_products(request, exclude_id=product.id)})
+    context.update({
+        'product': product,
+        'gallery_images': list(product.gallery_images.all()),
+        'similar': similar,
+        'visited_products': _visited_products(request, exclude_id=product.id),
+    })
     return render(request, 'store/product_detail.html', context)
 
 
@@ -300,6 +321,7 @@ def about(request):
     return render(request, 'store/about.html', context)
 
 
+@ensure_csrf_cookie
 def account(request):
     context = _base_context(request)
     phone = request.session.get('customer_phone')
@@ -316,10 +338,7 @@ def account(request):
 
     if request.method == 'POST':
         raw = request.POST.get('phone', '').strip()
-        full_name = request.POST.get('full_name', '').strip()
-        if len(full_name.split()) < 3:
-            context['error'] = 'اكتب اسمك الثلاثي كاملاً (الاسم واسم الأب والجد).'
-        elif not _valid_iraqi_phone(raw):
+        if not _valid_iraqi_phone(raw):
             context['error'] = 'أدخل رقم هاتف عراقي صحيح (10 أرقام تبدأ بـ7).'
         else:
             phone = _normalize_iraqi_phone(raw)
@@ -327,17 +346,57 @@ def account(request):
             if wait > 0:
                 context['error'] = f'لقد طلبت رمزاً مؤخراً. حاول بعد {wait} ثانية (بحد أقصى 3 رسائل في الساعة).'
             else:
-                request.session['otp_full_name'] = full_name
-                _start_otp(request, phone, 'account')
-                return redirect('checkout_otp')
+                sms_sent = _start_otp(request, phone, 'account')
+                if not sms_sent and not settings.SHOW_OTP:
+                    context['error'] = 'تعذر إرسال رمز التحقق حاليا. تأكد من إعدادات OTPIQ ثم حاول مرة أخرى.'
+                else:
+                    return redirect('checkout_otp')
         context['form_phone'] = raw
-        context['form_name'] = full_name
     context['logged_in'] = False
     return render(request, 'store/account.html', context)
 
 
+@ensure_csrf_cookie
+def account_details(request):
+    phone = request.session.get('customer_phone')
+    if not phone:
+        return redirect('account')
+
+    user, _ = User.objects.get_or_create(username=phone)
+    customer, _ = Customer.objects.get_or_create(phone=phone, defaults={'user': user})
+    if not customer.user:
+        customer.user = user
+        customer.save(update_fields=['user'])
+
+    context = _base_context(request)
+    context.update({
+        'customer': customer,
+        'phone_display': _phone_display(phone),
+        'provinces': PROVINCES,
+    })
+
+    if request.method == 'POST':
+        full_name = request.POST.get('full_name', '').strip()
+        province = request.POST.get('province', '').strip()
+        address = request.POST.get('address', '').strip()
+        if len(full_name.split()) < 3:
+            context['error'] = 'اكتب اسمك الثلاثي كاملاً.'
+        elif not province or not address:
+            context['error'] = 'أكمل المحافظة والعنوان.'
+        else:
+            user.first_name = full_name
+            user.save(update_fields=['first_name'])
+            customer.full_name = full_name
+            customer.province = province
+            customer.address = address
+            customer.save()
+            return redirect(request.POST.get('next') or 'account')
+
+    return render(request, 'store/account_details.html', context)
+
+
 def account_logout(request):
-    for k in ('customer_phone', 'otp_phone', 'otp_next', 'otp_payment',
+    for k in ('customer_phone', 'otp_phone', 'otp_next', 'otp_payment', 'otp_full_name',
               'otp_verified', 'dev_otp_code', 'otp_sms_sent'):
         request.session.pop(k, None)
     request.session.modified = True
@@ -368,7 +427,10 @@ def cart_add(request, pk):
 def cart_update(request, pk):
     cart = _cart(request)
     key = str(pk)
-    qty = int(request.POST.get('qty', 1))
+    try:
+        qty = int(request.POST.get('qty', 1))
+    except (TypeError, ValueError):
+        qty = 1
     if qty <= 0:
         cart.pop(key, None)
     elif key in cart:
@@ -377,6 +439,7 @@ def cart_update(request, pk):
     return redirect('cart')
 
 
+@require_POST
 def cart_remove(request, pk):
     cart = _cart(request)
     cart.pop(str(pk), None)
@@ -384,6 +447,7 @@ def cart_remove(request, pk):
     return redirect('cart')
 
 
+@ensure_csrf_cookie
 def cart_view(request):
     items, total = _cart_items(request)
     context = _base_context(request)
@@ -391,6 +455,7 @@ def cart_view(request):
     return render(request, 'store/cart.html', context)
 
 
+@ensure_csrf_cookie
 def checkout_phone(request):
     items, total = _cart_items(request)
     if not items:
@@ -416,11 +481,15 @@ def checkout_phone(request):
         if wait > 0:
             context['error'] = f'لقد طلبت رمزاً مؤخراً. حاول بعد {wait} ثانية (بحد أقصى 3 رسائل في الساعة).'
             return render(request, 'store/checkout_phone.html', context)
-        _start_otp(request, phone, 'checkout', payment_method)
+        sms_sent = _start_otp(request, phone, 'checkout', payment_method)
+        if not sms_sent and not settings.SHOW_OTP:
+            context['error'] = 'تعذر إرسال رمز التحقق حاليا. تأكد من إعدادات OTPIQ ثم حاول مرة أخرى.'
+            return render(request, 'store/checkout_phone.html', context)
         return redirect('checkout_otp')
     return render(request, 'store/checkout_phone.html', context)
 
 
+@ensure_csrf_cookie
 def checkout_otp(request):
     phone = request.session.get('otp_phone')
     if not phone:
@@ -443,13 +512,8 @@ def checkout_otp(request):
             if request.session.get('otp_next') == 'checkout':
                 request.session['otp_verified'] = True
                 return redirect('checkout_details')
-            # تسجيل/تحديث بيانات الزبون بالاسم الثلاثي
-            full_name = request.session.pop('otp_full_name', '')
             cust, _ = Customer.objects.get_or_create(phone=phone)
-            if full_name:
-                cust.full_name = full_name
-                cust.save(update_fields=['full_name'])
-            return redirect('account')
+            return redirect('account_details')
         context['error'] = 'رمز التحقق غير صحيح أو منتهي.'
     return render(request, 'store/checkout_otp.html', context)
 
@@ -465,6 +529,7 @@ def resend_otp(request):
     return redirect('checkout_otp')
 
 
+@ensure_csrf_cookie
 def checkout_details(request):
     if not request.session.get('otp_verified'):
         return redirect('checkout_phone')
@@ -474,6 +539,8 @@ def checkout_details(request):
 
     phone = request.session.get('otp_phone')
     customer = Customer.objects.filter(phone=phone).first()
+    profile_complete = bool(customer and customer.full_name and customer.province and customer.address)
+    editing_address = request.GET.get('edit') == '1' or not profile_complete
     context = _base_context(request)
     context.update({
         'items': items,
@@ -482,15 +549,18 @@ def checkout_details(request):
         'customer': customer,
         'provinces': PROVINCES,
         'payment_method': request.session.get('otp_payment', 'cod'),
+        'profile_complete': profile_complete,
+        'editing_address': editing_address,
     })
 
     if request.method == 'POST':
-        full_name = request.POST.get('full_name', '').strip()
-        province = request.POST.get('province', '').strip()
-        address = request.POST.get('address', '').strip()
+        full_name = (request.POST.get('full_name') or (customer.full_name if customer else '')).strip()
+        province = (request.POST.get('province') or (customer.province if customer else '')).strip()
+        address = (request.POST.get('address') or (customer.address if customer else '')).strip()
         payment_method = request.session.get('otp_payment', 'cod')
-        if not full_name or not province or not address:
-            context['error'] = 'أكمل الاسم والمحافظة والعنوان.'
+        if len(full_name.split()) < 3 or not province or not address:
+            context['error'] = 'أكمل الاسم الثلاثي والمحافظة والعنوان.'
+            context['editing_address'] = True
             return render(request, 'store/checkout_details.html', context)
 
         user, _ = User.objects.get_or_create(username=phone, defaults={'first_name': full_name})

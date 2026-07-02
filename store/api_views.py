@@ -1,9 +1,11 @@
 import json
+import secrets
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
 from django.shortcuts import get_object_or_404
-from .models import Product, SaleReservation
+from .models import Order, Product, SaleReservation
 from .serializers import ProductSerializer
 from django.core.paginator import Paginator
 
@@ -14,11 +16,19 @@ def _auth_token(request):
     header = request.headers.get('Authorization', '')
     if not header:
         return ''
-    return header.split()[-1]
+    parts = header.split()
+    if len(parts) == 2 and parts[0].lower() in {'token', 'bearer'}:
+        return parts[1]
+    return parts[-1]
 
 
 def _require_sync_token(request):
-    return _auth_token(request) == settings.SYNC_API_TOKEN
+    expected = getattr(settings, 'SYNC_API_TOKEN', '')
+    return bool(expected) and secrets.compare_digest(_auth_token(request), expected)
+
+
+def _invalid_token_response():
+    return JsonResponse({'status': 'error', 'error': 'invalid token'}, status=401)
 
 
 def _as_int(value, default=0):
@@ -83,27 +93,39 @@ def _upsert_product(data):
         )
     return {'action': 'insert' if created else 'update', 'sku': prod.sku, 'local_id': prod.local_id, 'quantity': prod.quantity}, None
 
+@require_GET
 def products_list(request):
     q = request.GET.get('search','').strip()
     qs = Product.objects.all().order_by('-created_at')
     if q:
-        qs = qs.filter(name__icontains=q)[:50]
+        qs = qs.filter(name__icontains=q)
     tab = request.GET.get('tab','all')
     if tab == 'offers':
         qs = qs.filter(is_offer=True)
-    page = int(request.GET.get('page',1))
-    per = int(request.GET.get('per',20))
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        per = int(request.GET.get('per', 20))
+    except (TypeError, ValueError):
+        per = 20
+    per = min(max(per, 1), 100)
     paginator = Paginator(qs, per)
     page_obj = paginator.get_page(page)
     data = ProductSerializer(page_obj.object_list, many=True).data
     return JsonResponse({'count': paginator.count, 'results': data})
 
+@require_GET
 def product_detail_api(request, pk):
     p = get_object_or_404(Product, pk=pk)
     return JsonResponse(ProductSerializer(p).data, safe=False)
 
 @csrf_exempt
+@require_POST
 def reserve(request):
+    if not _require_sync_token(request):
+        return _invalid_token_response()
     try:
         payload = json.loads(request.body.decode('utf-8'))
         full_name = payload.get('full_name') or payload.get('name')
@@ -117,9 +139,10 @@ def reserve(request):
         return JsonResponse({'status':'error','error': str(e)})
 
 @csrf_exempt
+@require_POST
 def sync_push(request):
     if not _require_sync_token(request):
-        return JsonResponse({'status':'error','error':'invalid token'}, status=401)
+        return _invalid_token_response()
     try:
         payload = json.loads(request.body.decode('utf-8'))
         device_id = payload.get('device_id','unknown')
@@ -159,7 +182,10 @@ def sync_push(request):
     except Exception as e:
         return JsonResponse({'status':'error','error': str(e)})
 
+@require_GET
 def sync_pull(request):
+    if not _require_sync_token(request):
+        return _invalid_token_response()
     since = request.GET.get('since')
     try:
         qs = Product.objects.all().order_by('-updated_at')[:100]
@@ -169,7 +195,10 @@ def sync_pull(request):
         return JsonResponse({'status':'error','error': str(e)})
 
 
+@require_GET
 def stock_snapshot(request):
+    if not _require_sync_token(request):
+        return _invalid_token_response()
     data = [
         {
             'local_id': p.local_id,
@@ -187,10 +216,19 @@ def stock_snapshot(request):
     return JsonResponse(data, safe=False)
 
 
+@require_GET
+def pending_orders_count(request):
+    if not _require_sync_token(request):
+        return _invalid_token_response()
+    count = Order.objects.filter(status='pending').count()
+    return JsonResponse({'status': 'ok', 'pending_orders': count})
+
+
 @csrf_exempt
+@require_POST
 def stock_update(request):
     if not _require_sync_token(request):
-        return JsonResponse({'status':'error','error':'invalid token'}, status=401)
+        return _invalid_token_response()
     try:
         payload = json.loads(request.body.decode('utf-8'))
         if isinstance(payload, dict):

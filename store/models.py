@@ -1,10 +1,17 @@
 import io
+import logging
 import os
 import uuid
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone
+from .image_processing import prepare_product_image
+
+
+logger = logging.getLogger(__name__)
 
 try:
     from PIL import Image
@@ -47,12 +54,15 @@ class ImageCompressMixin(models.Model):
     class Meta:
         abstract = True
 
+    def process_image_field(self, field_name, field_file):
+        return _compress_imagefield(field_file)
+
     def save(self, *args, **kwargs):
         for fname in self.image_fields:
             f = getattr(self, fname, None)
             # نضغط فقط الملفات المرفوعة حديثاً (غير المحفوظة بعد في التخزين)
             if f and not getattr(f, '_committed', True):
-                result = _compress_imagefield(f)
+                result = self.process_image_field(fname, f)
                 if result:
                     buffer, ext = result
                     base = os.path.splitext(os.path.basename(f.name))[0]
@@ -111,7 +121,66 @@ class Product(ImageCompressMixin, models.Model):
     is_offer = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def process_image_field(self, field_name, field_file):
+        if field_name == 'image':
+            try:
+                return prepare_product_image(field_file)
+            except Exception:
+                logger.exception('Failed to add branding to product image')
+                return _compress_imagefield(field_file)
+        return super().process_image_field(field_name, field_file)
+
     def __str__(self): return self.name
+
+
+class ProductImage(ImageCompressMixin, models.Model):
+    image_fields = ('image',)
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='gallery_images',
+    )
+    image = models.ImageField(upload_to='products/gallery/')
+    position = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(4)],
+    )
+    alt_text = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('position', 'id')
+        verbose_name = 'صورة إضافية للمنتج'
+        verbose_name_plural = 'صور المنتج الإضافية'
+
+    def clean(self):
+        super().clean()
+        if self.product_id:
+            existing = ProductImage.objects.filter(product_id=self.product_id)
+            if self.pk:
+                existing = existing.exclude(pk=self.pk)
+            if existing.count() >= 4:
+                raise ValidationError(
+                    'يمكن إضافة أربع صور إضافية فقط، ليكون الإجمالي خمس صور.'
+                )
+
+    def process_image_field(self, field_name, field_file):
+        if field_name == 'image':
+            try:
+                return prepare_product_image(field_file)
+            except Exception:
+                logger.exception('Failed to add branding to gallery image')
+                return _compress_imagefield(field_file)
+        return super().process_image_field(field_name, field_file)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.product} - صورة {self.position}'
+
 
 class Customer(models.Model):
     user = models.OneToOneField(User, null=True, blank=True, on_delete=models.SET_NULL)

@@ -22,13 +22,17 @@
                    placeholder="07XX XXX XXXX" maxlength="13"
                    value="{% if logged_phone %}{{ logged_phone_display }}{% endif %}" required>
           </div>
-          <small class="text-muted d-block mb-3">سيصلك رمز التحقق برسالة نصية 📩</small>
+          {% if logged_phone %}
+            <small class="text-muted d-block mb-3">سنستخدم رقمك المسجّل لهذا الطلب.</small>
+          {% else %}
+            <small class="text-muted d-block mb-3">سيصلك رمز التحقق برسالة نصية 📩</small>
+          {% endif %}
           <label class="form-label">طريقة الدفع</label>
           <div class="d-grid gap-2 mb-3">
             <label class="panel p-3"><input type="radio" name="payment_method" value="cod" checked> الدفع عند الاستلام</label>
             <label class="panel p-3"><input type="radio" name="payment_method" value="card"> دفع إلكتروني Mastercard / Visa</label>
           </div>
-          <button class="btn btn-orange btn-lg px-5" type="submit">إرسال رمز التحقق</button>
+          <button class="btn btn-orange btn-lg px-5" type="submit">{% if logged_phone %}متابعة الشراء{% else %}إرسال رمز التحقق{% endif %}</button>
         </form>
       </div>
     </div>

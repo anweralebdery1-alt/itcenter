@@ -112,7 +112,7 @@
         {% for v in home_videos|slice:":4" %}<span class="thumb">{% if v.thumbnail %}<img src="{{ v.thumbnail.url }}" alt="{{ v.title }}">{% else %}▶{% endif %}</span>{% empty %}<span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span>{% endfor %}
       </div>
     </a>
-    <a class="showcase-card" href="/?sort=best">
+    <a class="showcase-card" href="/?sort=best#products">
       <div class="showcase-head">
         <span class="showcase-emoji">🔥</span>
         <div><strong>الأكثر مبيعاً</strong><span class="showcase-sub">عرض الكل ←</span></div>
@@ -121,7 +121,7 @@
         {% for p in best %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
       </div>
     </a>
-    <a class="showcase-card" href="/?sort=popular">
+    <a class="showcase-card" href="/?sort=popular#products">
       <div class="showcase-head">
         <span class="showcase-emoji">⭐</span>
         <div><strong>الأكثر طلباً</strong><span class="showcase-sub">عرض الكل ←</span></div>
@@ -130,7 +130,7 @@
         {% for p in popular %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
       </div>
     </a>
-    <a class="showcase-card" href="/?sort=offers">
+    <a class="showcase-card" href="/?sort=offers#products">
       <div class="showcase-head">
         <span class="showcase-emoji">🏷️</span>
         <div><strong>العروض الخاصة</strong><span class="showcase-sub">عرض الكل ←</span></div>
@@ -139,7 +139,7 @@
         {% for p in offers %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
       </div>
     </a>
-    <a class="showcase-card" href="/?sort=newest">
+    <a class="showcase-card" href="/?sort=newest#products">
       <div class="showcase-head">
         <span class="showcase-emoji">🆕</span>
         <div><strong>وصل حديثاً</strong><span class="showcase-sub">عرض الكل ←</span></div>
@@ -179,7 +179,7 @@
           <div class="product-image">
             <div class="card-badges">
               {% if p.is_offer %}<span class="badge-pill badge-offer">عرض خاص</span>{% endif %}
-              {% if p.quantity <= 0 %}<span class="badge-pill badge-out">نفد المخزون</span>{% endif %}
+              {% if p.quantity <= 0 %}<span class="badge-pill badge-out">غير متوفر</span>{% endif %}
             </div>
             {% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}
           </div>
@@ -191,7 +191,7 @@
           <div class="price">{{ p.sell_price|money }} <small>د.ع</small></div>
           <div class="d-flex justify-content-between align-items-center mt-1">
             <span class="sku">SKU: {{ p.sku }}</span>
-            {% if p.quantity > 0 %}<span class="stock">● متوفر {{ p.quantity }}</span>{% else %}<span class="out">● نفد</span>{% endif %}
+            {% if p.quantity > 0 %}<span class="stock">● متوفر</span>{% else %}<span class="out">● غير متوفر</span>{% endif %}
           </div>
           <div class="card-actions">
             <a class="btn btn-outline-primary" href="{% url 'product_detail' p.id %}">التفاصيل</a>

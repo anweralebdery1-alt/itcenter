@@ -1,0 +1,39 @@
+{% extends 'store/base.html' %}
+{% block title %}بيانات الحساب | {{ settings.site_name }}{% endblock %}
+{% block content %}
+<main class="container-wide">
+  <div class="panel p-4 mt-4" style="max-width:760px">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <h2 class="fw-bold m-0">بيانات الحساب والعنوان</h2>
+        <div class="text-muted mt-1">رقم الهاتف المؤكد: <strong dir="ltr">{{ phone_display }}</strong></div>
+      </div>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'account' %}">رجوع</a>
+    </div>
+
+    {% if error %}<div class="alert alert-danger mt-3">{{ error }}</div>{% endif %}
+    <form method="post" class="mt-4">
+      {% csrf_token %}
+      {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
+
+      <label class="form-label fw-bold">الاسم الثلاثي</label>
+      <input class="form-control form-control-lg mb-3" name="full_name"
+             value="{{ customer.full_name|default:'' }}"
+             placeholder="الاسم واسم الأب واسم الجد" required>
+
+      <label class="form-label fw-bold">المحافظة</label>
+      <select class="form-control form-control-lg mb-3" name="province" required>
+        <option value="">اختر المحافظة</option>
+        {% for p in provinces %}
+          <option value="{{ p }}" {% if customer.province == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+
+      <label class="form-label fw-bold">العنوان التفصيلي</label>
+      <textarea class="form-control mb-3" name="address" rows="4" required>{{ customer.address|default:'' }}</textarea>
+
+      <button class="btn btn-orange px-5" type="submit">حفظ البيانات</button>
+    </form>
+  </div>
+</main>
+{% endblock %}

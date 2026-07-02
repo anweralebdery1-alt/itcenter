@@ -1,9 +1,11 @@
-from django.contrib import admin
-from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
-from django.views.static import serve
+from django.contrib import admin
+from django.urls import include, path
+
 from store import views
+
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.home, name='home'),
@@ -11,6 +13,7 @@ urlpatterns = [
     path('videos/', views.videos, name='videos'),
     path('about/', views.about, name='about'),
     path('account/', views.account, name='account'),
+    path('account/details/', views.account_details, name='account_details'),
     path('account/logout/', views.account_logout, name='account_logout'),
     path('product/<int:pk>/', views.product_detail, name='product_detail'),
     path('cart/', views.cart_view, name='cart'),
@@ -26,10 +29,5 @@ urlpatterns = [
     path('api/', include('store.api_urls')),
 ]
 
-if settings.DEBUG:
+if settings.SERVE_MEDIA_WITH_DJANGO:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-else:
-    # خدمة ملفات الوسائط (صور المنتجات) في الإنتاج أيضاً — مناسب لموقع صغير/تجريبي
-    urlpatterns += [
-        re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
-    ]

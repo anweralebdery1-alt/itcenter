@@ -3,7 +3,7 @@ Usage: set SERVER_URL and API_TOKEN then run: python sync_client.py
 """
 import sqlite3, json, requests, os
 SERVER_URL = os.environ.get('SYNC_SERVER','http://localhost:8000')
-API_TOKEN = os.environ.get('SYNC_API_TOKEN','changeme_token')
+API_TOKEN = os.environ.get('SYNC_API_TOKEN','')
 LOCAL_DB = r"D:\shop\old\offlinesales\store.db"
 
 
@@ -28,6 +28,9 @@ def read_changes():
 
 
 def push(changes):
+    if not API_TOKEN:
+        print('SYNC_API_TOKEN is required')
+        return
     if not changes:
         print('no changes to push')
         return

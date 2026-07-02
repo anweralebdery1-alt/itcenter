@@ -22,3 +22,19 @@ env/
 
 # أسرار محلية
 .env
+.env.*
+!.env.production.example
+
+# بيانات محلية أو مصدرة
+*.sqlite3
+*.db
+store_data.json
+backups/
+
+# حزم النشر وملفات المفاتيح
+*.zip
+*.tar.gz
+*.pem
+*.key
+*.p12
+*.pfx
