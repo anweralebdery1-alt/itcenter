@@ -81,9 +81,12 @@ class SiteSettingsAdmin(admin.ModelAdmin):
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'parent')
+    list_display = ('name', 'parent', 'order', 'is_active')
+    list_editable = ('order', 'is_active')
     search_fields = ('name',)
-    list_filter = ('parent',)
+    list_filter = ('is_active', 'parent')
+    ordering = ('order', 'name')
+    fields = ('name', 'parent', 'order', 'is_active')
 
 
 @admin.register(Series)

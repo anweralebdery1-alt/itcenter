@@ -118,7 +118,7 @@ def _otp_wait_seconds(phone):
         if oldest:
             hourly = int(3600 - (now - oldest.created_at).total_seconds()) + 1
     return max(0, cooldown, hourly)
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, F, Prefetch, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
@@ -203,7 +203,15 @@ def _base_context(request):
     return {
         'settings': _settings(),
         'cart_count': _cart_count(request),
-        'categories': Category.objects.all().order_by('name'),
+        # التصنيفات الرئيسية فقط (مع أبنائها) لعرضها في شريط التصنيفات
+        'categories': (
+            Category.objects
+            .filter(parent__isnull=True, is_active=True)
+            .order_by('order', 'name')
+            .prefetch_related(
+                Prefetch('children', queryset=Category.objects.filter(is_active=True).order_by('order', 'name'))
+            )
+        ),
         'sections': SiteSection.objects.filter(is_active=True),
     }
 
@@ -239,7 +247,13 @@ def home(request):
     if search:
         products_qs = products_qs.filter(Q(name__icontains=search) | Q(sku__icontains=search) | Q(description__icontains=search))
     if category_id:
-        products_qs = products_qs.filter(category_id=category_id)
+        # عند اختيار تصنيف رئيسي نعرض منتجاته ومنتجات تصنيفاته الفرعية أيضاً
+        selected_cat = Category.objects.filter(id=category_id).first()
+        if selected_cat:
+            child_ids = list(selected_cat.children.values_list('id', flat=True))
+            products_qs = products_qs.filter(category_id__in=[selected_cat.id] + child_ids)
+        else:
+            products_qs = products_qs.filter(category_id=category_id)
 
     if sort == 'price_low':
         products = list(products_qs.order_by('sell_price')[:per])

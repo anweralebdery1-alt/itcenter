@@ -71,7 +71,19 @@ class ImageCompressMixin(models.Model):
 class Category(models.Model):
     name = models.CharField(max_length=200)
     parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='children')
-    def __str__(self): return self.name
+    order = models.IntegerField(default=0, blank=True, verbose_name='أولوية الظهور',
+                                help_text='الأصغر يظهر أولاً في شريط التصنيفات.')
+    is_active = models.BooleanField(default=True, verbose_name='مفعّل')
+
+    class Meta:
+        ordering = ('order', 'name')
+        verbose_name = 'تصنيف'
+        verbose_name_plural = 'التصنيفات'
+
+    def __str__(self):
+        if self.parent_id:
+            return f'{self.parent.name} › {self.name}'
+        return self.name
 class Series(models.Model):
     name = models.CharField(max_length=200)
     def __str__(self): return self.name

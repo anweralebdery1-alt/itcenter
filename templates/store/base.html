@@ -215,6 +215,26 @@
     .chip.hot:hover, .chip.hot.active { background: linear-gradient(135deg, #ef4444, #b91c1c); border-color: #b91c1c; }
     .chip-divider { width: 1px; height: 22px; background: var(--line); flex: none; margin: 0 4px; }
 
+    /* ---------- Category dropdown (main + subcategories) ---------- */
+    .cat-dropdown { position: relative; flex: none; }
+    .cat-chip { cursor: pointer; }
+    .cat-caret { font-size: 10px; opacity: .7; margin-inline-start: 2px; transition: transform .15s ease; }
+    .cat-dropdown.open .cat-caret { transform: rotate(180deg); }
+    .cat-menu {
+      position: absolute; top: calc(100% + 6px); inset-inline-start: 0;
+      min-width: 200px; max-height: 60vh; overflow-y: auto;
+      background: #fff; border: 1px solid var(--line); border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(15,23,42,.14); padding: 6px;
+      display: none; z-index: 60;
+    }
+    .cat-dropdown:hover .cat-menu, .cat-dropdown.open .cat-menu { display: block; }
+    .cat-menu a {
+      display: block; padding: 8px 12px; border-radius: 8px;
+      font-size: 13px; font-weight: 600; color: #334155; text-decoration: none; white-space: nowrap;
+    }
+    .cat-menu a:hover, .cat-menu a.active { background: var(--blue); color: #fff; }
+    .cat-menu a.cat-menu-all { font-weight: 800; border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; margin-bottom: 4px; }
+
     /* ---------- Buttons ---------- */
     .btn { border-radius: var(--radius-sm); font-weight: 800; transition: filter .15s ease, transform .15s ease, box-shadow .15s ease; }
     .btn:active { transform: translateY(1px); }
@@ -452,14 +472,28 @@
     </div>
   </nav>
 
-  {% comment %} شريط التصنيفات يظهر فقط في قسم الإلكترونيات (وأثناء التصفية داخله) {% endcomment %}
+  {% comment %} شريط التصنيفات: يعرض التصنيفات الرئيسية فقط وداخل كل واحد تصنيفاته الفرعية {% endcomment %}
   {% if categories and request.path == '/' and request.GET.view == 'electronics' %}
   <div class="filter-nav">
     <div class="container-wide filter-strip">
       <span class="filter-label">التصنيفات:</span>
-      <a class="chip {% if not selected_category %}active{% endif %}" href="/?view=electronics">الكل</a>
+      <a class="chip {% if not selected_category %}active{% endif %}" href="/?view=electronics">All</a>
       {% for c in categories %}
-        <a class="chip {% if selected_category == c.id|stringformat:'s' %}active{% endif %}" href="/?view=electronics&category={{ c.id }}">{{ c.name }}</a>
+        {% with subs=c.children.all %}
+        <div class="cat-dropdown">
+          <a class="chip cat-chip {% if selected_category == c.id|stringformat:'s' %}active{% endif %}" href="/?view=electronics&category={{ c.id }}">
+            {{ c.name }}{% if subs %}<span class="cat-caret">▾</span>{% endif %}
+          </a>
+          {% if subs %}
+          <div class="cat-menu">
+            <a class="cat-menu-all {% if selected_category == c.id|stringformat:'s' %}active{% endif %}" href="/?view=electronics&category={{ c.id }}">All {{ c.name }}</a>
+            {% for sub in subs %}
+              <a class="{% if selected_category == sub.id|stringformat:'s' %}active{% endif %}" href="/?view=electronics&category={{ sub.id }}">{{ sub.name }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endwith %}
       {% endfor %}
     </div>
   </div>
@@ -528,6 +562,22 @@
         e.preventDefault();
         alert('أدخل رقم هاتف عراقي صحيح: ١٠ أرقام تبدأ بـ7 (مثال: 07XX XXX XXXX).');
         inp.focus();
+      }
+    });
+
+    // شريط التصنيفات: النقر على السهم يفتح/يغلق قائمة التصنيفات الفرعية (للأجهزة اللمسية)
+    document.addEventListener('click', function (e) {
+      var caret = e.target.closest('.cat-caret');
+      if (caret) {
+        e.preventDefault();
+        var dd = caret.closest('.cat-dropdown');
+        var wasOpen = dd.classList.contains('open');
+        document.querySelectorAll('.cat-dropdown.open').forEach(function (o) { o.classList.remove('open'); });
+        if (!wasOpen) dd.classList.add('open');
+        return;
+      }
+      if (!e.target.closest('.cat-menu')) {
+        document.querySelectorAll('.cat-dropdown.open').forEach(function (o) { o.classList.remove('open'); });
       }
     });
   </script>
