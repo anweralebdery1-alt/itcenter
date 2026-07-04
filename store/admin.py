@@ -69,6 +69,10 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         ('واجهة الصفحة الرئيسية', {'fields': ('hero_title', 'hero_subtitle', 'hero_image')}),
         ('ألوان المتجر', {'fields': ('primary_color', 'accent_color')}),
         ('معلومات التواصل', {'fields': ('phone', 'whatsapp', 'address')}),
+        ('تحسين محركات البحث (SEO)', {
+            'fields': ('meta_description', 'meta_keywords', 'google_site_verification'),
+            'description': 'إعدادات تساعد على ظهور المتجر في نتائج بحث جوجل بسرعة.',
+        }),
     )
 
     def has_add_permission(self, request):
@@ -115,7 +119,7 @@ class ProductAdminForm(forms.ModelForm):
 
     class Meta:
         model = Product
-        exclude = ('specifications',)
+        exclude = ('specifications', 'views_count')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -177,21 +181,38 @@ class ProductImageInline(admin.TabularInline):
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
-    list_display = ('name', 'sku', 'sell_price', 'quantity', 'category', 'is_offer', 'updated_at')
-    list_editable = ('sell_price', 'quantity', 'is_offer')
+    list_display = ('name', 'sku', 'sell_price', 'quantity', 'category',
+                    'is_featured', 'featured_priority', 'is_offer', 'views_count', 'updated_at')
+    list_editable = ('sell_price', 'quantity', 'is_featured', 'featured_priority', 'is_offer')
     search_fields = ('name', 'sku', 'description')
-    list_filter = ('category', 'series', 'is_offer')
-    readonly_fields = ('uuid', 'created_at', 'updated_at')
+    list_filter = ('is_featured', 'category', 'series', 'is_offer')
+    ordering = ('-is_featured', 'featured_priority', '-updated_at')
+    readonly_fields = ('uuid', 'views_count', 'created_at', 'updated_at')
     inlines = (ProductImageInline,)
+    actions = ('mark_featured', 'unmark_featured')
     fieldsets = (
         ('بيانات المنتج', {
             'fields': ('name', 'sku', 'image', 'description', 'specifications_text'),
             'description': 'الصورة هنا هي الصورة الرئيسية. يمكن إضافة أربع صور اختيارية أخرى أسفل الصفحة.',
         }),
         ('الأسعار والمخزون', {'fields': ('buy_price', 'sell_price', 'quantity', 'is_offer')}),
+        ('الإبراز وأولوية الظهور', {
+            'fields': ('is_featured', 'featured_priority'),
+            'description': 'فعّل «منتج مميّز» ليظهر أولاً في الصفحة الرئيسية. الأولوية الأعلى تظهر قبل غيرها.',
+        }),
         ('التنظيم', {'fields': ('category', 'series')}),
-        ('معلومات النظام', {'fields': ('uuid', 'created_at', 'updated_at')}),
+        ('معلومات النظام', {'fields': ('uuid', 'views_count', 'created_at', 'updated_at')}),
     )
+
+    @admin.action(description='تمييز المنتجات المحددة (إبراز)')
+    def mark_featured(self, request, queryset):
+        updated = queryset.update(is_featured=True)
+        self.message_user(request, f'تم تمييز {updated} منتجاً.')
+
+    @admin.action(description='إلغاء تمييز المنتجات المحددة')
+    def unmark_featured(self, request, queryset):
+        updated = queryset.update(is_featured=False)
+        self.message_user(request, f'تم إلغاء تمييز {updated} منتجاً.')
 
 
 @admin.register(Customer)

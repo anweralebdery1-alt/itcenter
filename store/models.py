@@ -89,6 +89,15 @@ class SiteSettings(ImageCompressMixin, models.Model):
     hero_image = models.ImageField(upload_to='site/', blank=True, null=True)
     primary_color = models.CharField(max_length=20, default='#0B4EA2')
     accent_color = models.CharField(max_length=20, default='#FF8A00')
+    meta_description = models.CharField(
+        max_length=300, blank=True, verbose_name='وصف الموقع لمحركات البحث (Meta Description)',
+        help_text='وصف مختصر (حتى 160 حرفاً) يظهر في نتائج بحث جوجل للصفحة الرئيسية.')
+    meta_keywords = models.CharField(
+        max_length=300, blank=True, verbose_name='كلمات مفتاحية',
+        help_text='كلمات يفصل بينها فاصلة، مثل: أردوينو, حسّاسات, روبوت, قطع إلكترونية.')
+    google_site_verification = models.CharField(
+        max_length=200, blank=True, verbose_name='رمز التحقق من Google Search Console',
+        help_text='الصق قيمة "content" من وسم التحقق google-site-verification فقط.')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -119,6 +128,10 @@ class Product(ImageCompressMixin, models.Model):
     category = models.ForeignKey(Category, null=True, blank=True, on_delete=models.SET_NULL)
     series = models.ForeignKey(Series, null=True, blank=True, on_delete=models.SET_NULL)
     is_offer = models.BooleanField(default=False)
+    is_featured = models.BooleanField(default=False, verbose_name='منتج مميّز')
+    featured_priority = models.IntegerField(default=0, blank=True, verbose_name='أولوية الظهور',
+                                            help_text='الأعلى يظهر أولاً بين المنتجات المميّزة')
+    views_count = models.PositiveIntegerField(default=0, verbose_name='عدد المشاهدات')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -132,6 +145,18 @@ class Product(ImageCompressMixin, models.Model):
         return super().process_image_field(field_name, field_file)
 
     def __str__(self): return self.name
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('product_detail', args=[self.pk])
+
+    @property
+    def meta_description(self):
+        text = (self.description or '').strip()
+        if not text:
+            text = self.name
+        text = ' '.join(text.split())
+        return text[:160]
 
 
 class ProductImage(ImageCompressMixin, models.Model):

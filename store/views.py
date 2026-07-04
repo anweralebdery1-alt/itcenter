@@ -1,3 +1,4 @@
+import random
 import re
 import secrets
 from django.conf import settings
@@ -117,7 +118,7 @@ def _otp_wait_seconds(phone):
         if oldest:
             hourly = int(3600 - (now - oldest.created_at).total_seconds()) + 1
     return max(0, cooldown, hourly)
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, F, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
@@ -210,6 +211,19 @@ def _base_context(request):
 PER_OPTIONS = [20, 50, 100]
 
 
+def _smart_ordered_products(qs, per):
+    """المميّزة أولاً (حسب الأولوية)، ثم البقية: 80% حسب الشعبية (مبيعات + مشاهدات) و20% عشوائي."""
+    items = list(qs.annotate(sold=Sum('orderitem__quantity')))
+    featured = sorted(
+        (p for p in items if p.is_featured),
+        key=lambda p: (-p.featured_priority, -(p.created_at.timestamp() if p.created_at else 0)),
+    )
+    rest = [p for p in items if not p.is_featured]
+    max_pop = max(((p.sold or 0) + p.views_count for p in rest), default=0) or 1
+    rest.sort(key=lambda p: -(0.8 * (((p.sold or 0) + p.views_count) / max_pop) + 0.2 * random.random()))
+    return (featured + rest)[:per]
+
+
 def home(request):
     try:
         per = int(request.GET.get('per', 20))
@@ -219,7 +233,7 @@ def home(request):
         per = 20
     search = request.GET.get('search', '').strip()
     category_id = request.GET.get('category', '').strip()
-    sort = request.GET.get('sort', 'newest')
+    sort = request.GET.get('sort', 'featured')
     products_qs = Product.objects.select_related('category', 'series').all()
 
     if search:
@@ -228,23 +242,24 @@ def home(request):
         products_qs = products_qs.filter(category_id=category_id)
 
     if sort == 'price_low':
-        products_qs = products_qs.order_by('sell_price')
+        products = list(products_qs.order_by('sell_price')[:per])
     elif sort == 'price_high':
-        products_qs = products_qs.order_by('-sell_price')
+        products = list(products_qs.order_by('-sell_price')[:per])
     elif sort == 'best':
-        # الأكثر مبيعاً: حسب مجموع الكميات المباعة فعلياً
-        products_qs = products_qs.annotate(sold=Sum('orderitem__quantity')).order_by('-sold', '-created_at')
+        products = list(products_qs.annotate(sold=Sum('orderitem__quantity')).order_by('-sold', '-created_at')[:per])
     elif sort == 'popular':
-        # الأكثر طلباً: حسب عدد مرات الطلب
-        products_qs = products_qs.annotate(order_count=Count('orderitem')).order_by('-order_count', '-created_at')
+        products = list(products_qs.annotate(order_count=Count('orderitem')).order_by('-order_count', '-created_at')[:per])
     elif sort == 'offers':
-        products_qs = products_qs.filter(is_offer=True).order_by('-updated_at')
+        products = list(products_qs.filter(is_offer=True).order_by('-updated_at')[:per])
+    elif sort == 'newest':
+        products = list(products_qs.order_by('-created_at')[:per])
     else:
-        products_qs = products_qs.order_by('-created_at')
+        # الافتراضي: ترتيب ذكي (مميّزة + 80% شعبية + 20% عشوائي)
+        products = _smart_ordered_products(products_qs, per)
 
     context = _base_context(request)
     context.update({
-        'products': products_qs[:per],
+        'products': products,
         'per': per,
         'per_options': PER_OPTIONS,
         # بطاقات العرض في الرئيسية (صور مصغرة)
@@ -269,6 +284,7 @@ def product_detail(request, pk):
         pk=pk,
     )
     _remember_product(request, product.id)
+    Product.objects.filter(pk=product.pk).update(views_count=F('views_count') + 1)
     if product.series:
         similar = Product.objects.filter(series=product.series).exclude(pk=product.pk)[:6]
     elif product.category:
@@ -319,6 +335,22 @@ def about(request):
     context = _base_context(request)
     context.update({'team': TeamMember.objects.filter(is_active=True)})
     return render(request, 'store/about.html', context)
+
+
+def robots_txt(request):
+    from django.http import HttpResponse
+    sitemap_url = request.build_absolute_uri('/sitemap.xml')
+    lines = [
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /admin/',
+        'Disallow: /account/',
+        'Disallow: /cart/',
+        'Disallow: /checkout/',
+        'Disallow: /api/',
+        f'Sitemap: {sitemap_url}',
+    ]
+    return HttpResponse('\n'.join(lines), content_type='text/plain')
 
 
 @ensure_csrf_cookie

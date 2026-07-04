@@ -4,6 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ settings.site_name|default:"مركز آي تي للتطوير والتدريب" }}{% endblock %}</title>
+
+  {# --- SEO / تحسين محركات البحث --- #}
+  <meta name="description" content="{% block meta_description %}{{ settings.meta_description|default:settings.tagline|default:"متجر إلكترونيات وقطع أردوينو وروبوت ودورات تدريبية في العراق." }}{% endblock %}">
+  {% if settings.meta_keywords %}<meta name="keywords" content="{{ settings.meta_keywords }}">{% endif %}
+  <link rel="canonical" href="{{ request.build_absolute_uri }}">
+  <meta name="robots" content="index, follow">
+  {% if settings.google_site_verification %}<meta name="google-site-verification" content="{{ settings.google_site_verification }}">{% endif %}
+
+  {# Open Graph / مشاركة على وسائل التواصل #}
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  <meta property="og:site_name" content="{{ settings.site_name|default:"مركز آي تي للتطوير والتدريب" }}">
+  <meta property="og:title" content="{% block og_title %}{{ settings.site_name|default:"مركز آي تي للتطوير والتدريب" }}{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}{{ settings.meta_description|default:settings.tagline }}{% endblock %}">
+  <meta property="og:url" content="{{ request.build_absolute_uri }}">
+  {% block og_image %}{% if settings.logo %}<meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{{ settings.logo.url }}">{% endif %}{% endblock %}
+  <meta name="twitter:card" content="summary_large_image">
+  {% block structured_data %}{% endblock %}
+
   {% if settings.logo %}
   <link rel="icon" href="{{ settings.logo.url }}">
   <link rel="shortcut icon" href="{{ settings.logo.url }}">

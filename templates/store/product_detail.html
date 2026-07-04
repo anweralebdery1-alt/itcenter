@@ -1,6 +1,30 @@
 {% extends 'store/base.html' %}
 {% load store_extras %}
 {% block title %}{{ product.name }} | {{ settings.site_name }}{% endblock %}
+{% block meta_description %}{{ product.meta_description }}{% endblock %}
+{% block og_type %}product{% endblock %}
+{% block og_title %}{{ product.name }}{% endblock %}
+{% block og_description %}{{ product.meta_description }}{% endblock %}
+{% block og_image %}{% if product.image %}<meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{{ product.image.url }}">{% elif settings.logo %}<meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{{ settings.logo.url }}">{% endif %}{% endblock %}
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "{{ product.name|escapejs }}",
+  "description": "{{ product.meta_description|escapejs }}",
+  {% if product.image %}"image": "{{ request.scheme }}://{{ request.get_host }}{{ product.image.url }}",{% endif %}
+  {% if product.sku %}"sku": "{{ product.sku|escapejs }}",{% endif %}
+  "offers": {
+    "@type": "Offer",
+    "url": "{{ request.build_absolute_uri }}",
+    "priceCurrency": "IQD",
+    "price": "{{ product.sell_price|floatformat:0 }}",
+    "availability": "{% if product.quantity > 0 %}https://schema.org/InStock{% else %}https://schema.org/OutOfStock{% endif %}"
+  }
+}
+</script>
+{% endblock %}
 {% block extra_css %}
 <style>
   .detail-layout {
