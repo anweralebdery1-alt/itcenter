@@ -167,12 +167,12 @@
     }
     .mobile-about:hover { color: #fff; background: rgba(255,255,255,.26); }
 
-    /* translucent top bar (~82%) */
+    /* translucent top bar (~85%) */
     @supports (background: color-mix(in srgb, red, blue)) {
       .market-header {
         background: linear-gradient(135deg,
-          color-mix(in srgb, var(--blue-dark) 82%, transparent),
-          color-mix(in srgb, var(--blue) 82%, transparent));
+          color-mix(in srgb, var(--blue-dark) 85%, transparent),
+          color-mix(in srgb, var(--blue) 85%, transparent));
         -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
       }
     }
@@ -185,29 +185,40 @@
       .menu-toggle { display: inline-flex; }
       .brand { margin-inline-end: auto; min-width: 0; }
       .search-wrap { order: 3; flex: 1 0 100%; }
-      body { padding-bottom: 74px; }
+      body { padding-bottom: 90px; }
 
+      /* شريط سفلي طافٍ بشكل بيضوي (كبسولة) مرفوع عن الحافة — مثل إنستغرام */
       .bottom-nav {
-        display: flex; direction: ltr;
-        position: fixed; inset-inline: 0; bottom: 0; z-index: 60;
-        background: rgba(255,255,255,.82);
-        -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-        border-top: 1px solid var(--line); box-shadow: 0 -6px 20px rgba(2,8,23,.12);
-        padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+        display: flex; direction: rtl;
+        position: fixed; left: 14px; right: 14px; z-index: 60;
+        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+        background: rgba(255,255,255,.85);
+        -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+        border: 1px solid rgba(255,255,255,.55);
+        border-radius: 999px;
+        box-shadow: 0 12px 30px rgba(2,8,23,.20);
+        padding: 8px 6px;
       }
       .bottom-nav a, .bottom-nav button {
         flex: 1; background: none; border: 0; cursor: pointer; font-family: inherit;
         display: flex; flex-direction: column; align-items: center; gap: 3px;
         font-size: 11px; font-weight: 800; color: #475569; text-decoration: none;
-        padding: 4px 0; position: relative;
+        padding: 6px 0; position: relative; border-radius: 18px;
+        -webkit-tap-highlight-color: transparent;
+        transition: transform .12s ease, background .12s ease, color .12s ease;
       }
+      /* تفاعل عند الضغط: تصغير + إبراز يؤكّد أن الضغطة تمّت */
+      .bottom-nav a:active, .bottom-nav button:active { transform: scale(.88); background: rgba(11,78,162,.12); }
       .bottom-nav a.active, .bottom-nav .active { color: var(--blue); }
       .bottom-nav svg { width: 23px; height: 23px; }
       .bottom-nav .bn-badge {
-        position: absolute; top: -3px; inset-inline-end: 24%;
+        position: absolute; top: 0; inset-inline-end: 22%;
         background: var(--orange); color: #fff; font-size: 10px; font-weight: 900;
         border-radius: 999px; padding: 0 5px; line-height: 1.7;
       }
+
+      /* تفاعل ضغط لزر القائمة وزر حولنا أيضاً */
+      .menu-toggle:active, .mobile-about:active { transform: scale(.9); }
     }
 
     /* slide-in drawer (opened by hamburger / bottom categories) */
@@ -531,13 +542,13 @@
         </a>
 
         <div class="search-wrap">
+          <button type="button" class="menu-toggle" data-drawer-open aria-label="القائمة">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
           <form class="search-form" action="/" method="get">
             <input name="search" value="{{ search|default:'' }}" placeholder="ابحث عن منتج، دورة، فيديو، أو SKU">
             <button type="submit">بحث</button>
           </form>
-          <button type="button" class="menu-toggle" data-drawer-open aria-label="القائمة">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-          </button>
         </div>
 
         <a class="header-action desktop-action" href="{% url 'about' %}" title="حول المركز">
