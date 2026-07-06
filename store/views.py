@@ -367,6 +367,38 @@ def robots_txt(request):
     return HttpResponse('\n'.join(lines), content_type='text/plain')
 
 
+def install_app(request):
+    """صفحة تعليمات تثبيت المتجر كتطبيق (Add to Home Screen) لكل نظام."""
+    context = _base_context(request)
+    return render(request, 'store/install.html', context)
+
+
+def manifest(request):
+    """ملف Web App Manifest ليصبح الموقع قابلاً للتثبيت كتطبيق."""
+    site = _settings()
+    name = site.site_name if site else 'متجر المركز'
+    theme = (site.primary_color if site else '') or '#0B4EA2'
+    icons = []
+    if site and site.logo:
+        icon_url = request.build_absolute_uri(site.logo.url)
+        for size in ('192x192', '512x512'):
+            icons.append({'src': icon_url, 'sizes': size, 'type': 'image/png', 'purpose': 'any'})
+    data = {
+        'name': name,
+        'short_name': name[:12],
+        'start_url': '/',
+        'scope': '/',
+        'display': 'standalone',
+        'orientation': 'portrait',
+        'background_color': '#ffffff',
+        'theme_color': theme,
+        'lang': 'ar',
+        'dir': 'rtl',
+        'icons': icons,
+    }
+    return JsonResponse(data, content_type='application/manifest+json')
+
+
 @ensure_csrf_cookie
 def account(request):
     context = _base_context(request)

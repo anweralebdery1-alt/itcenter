@@ -1,0 +1,132 @@
+{% extends 'store/base.html' %}
+{% block title %}تحميل التطبيق | {{ settings.site_name }}{% endblock %}
+{% block meta_description %}ثبّت متجر {{ settings.site_name }} كتطبيق على هاتفك للوصول السريع.{% endblock %}
+{% block extra_css %}
+<style>
+  .install-wrap { max-width: 720px; margin: 26px auto; }
+  .install-hero { text-align: center; margin-bottom: 22px; }
+  .install-hero .app-ico {
+    width: 84px; height: 84px; border-radius: 20px; margin: 0 auto 12px; overflow: hidden;
+    display: grid; place-items: center; background: linear-gradient(135deg, var(--blue), var(--blue-dark));
+    color: #fff; font-weight: 900; font-size: 30px; box-shadow: 0 12px 30px rgba(2,8,23,.22);
+  }
+  .install-hero .app-ico img { width: 100%; height: 100%; object-fit: cover; }
+  .install-hero h1 { font-size: 24px; font-weight: 900; }
+  .install-hero p { color: var(--muted); }
+
+  #installNow {
+    display: none; margin: 8px auto 20px; background: linear-gradient(135deg, var(--orange), var(--orange-dark));
+    color: #fff; border: 0; border-radius: 999px; padding: 13px 34px; font-weight: 900; font-size: 16px; cursor: pointer;
+    box-shadow: 0 10px 26px rgba(255,138,0,.35);
+  }
+  #installNow:active { transform: scale(.97); }
+
+  .os-card { background: #fff; border: 1px solid var(--line); border-radius: 16px; margin-bottom: 14px; overflow: hidden; }
+  .os-head {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: start;
+    background: none; border: 0; padding: 16px; cursor: pointer; font-family: inherit;
+  }
+  .os-head .os-emoji { font-size: 24px; }
+  .os-head .os-title { flex: 1; font-weight: 800; font-size: 16px; color: var(--ink); }
+  .os-head .os-chev { width: 20px; height: 20px; color: var(--muted); transition: transform .2s ease; }
+  .os-card.open .os-chev { transform: rotate(180deg); }
+  .os-steps { display: none; padding: 0 18px 18px; }
+  .os-card.open .os-steps { display: block; }
+  .os-steps ol { margin: 0; padding-inline-start: 20px; }
+  .os-steps li { margin: 9px 0; line-height: 1.7; color: #334155; font-weight: 600; }
+  .os-steps .hint { background: #f1f5f9; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+</style>
+{% endblock %}
+{% block content %}
+<main class="container-wide">
+  <div class="install-wrap">
+    <div class="install-hero">
+      <div class="app-ico">
+        {% if settings.logo %}<img src="{{ settings.logo.url }}" alt="{{ settings.site_name }}">{% else %}IT{% endif %}
+      </div>
+      <h1>حمّل تطبيق {{ settings.site_name|default:"المتجر" }}</h1>
+      <p>ثبّت المتجر كتطبيق على هاتفك للوصول السريع بلا فتح المتصفح كل مرة.</p>
+      <button type="button" id="installNow">📲 تثبيت التطبيق الآن</button>
+    </div>
+
+    <p class="fw-bold mb-2">اختر نوع جهازك لعرض طريقة التثبيت:</p>
+
+    <div class="os-card" data-os>
+      <button type="button" class="os-head">
+        <span class="os-emoji">🤖</span>
+        <span class="os-title">أندرويد (Chrome)</span>
+        <svg class="os-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="os-steps">
+        <ol>
+          <li>افتح الموقع في متصفح <b>Chrome</b>.</li>
+          <li>اضغط زر القائمة <b>⋮</b> في أعلى الزاوية.</li>
+          <li>اختر <b>«تثبيت التطبيق»</b> أو <b>«إضافة إلى الشاشة الرئيسية»</b>.</li>
+          <li>اضغط <b>«تثبيت»</b>، وسيظهر أيقونة المتجر على شاشتك.</li>
+        </ol>
+        <div class="hint">أو ببساطة اضغط زر <b>«تثبيت التطبيق الآن»</b> بالأعلى إن ظهر لك.</div>
+      </div>
+    </div>
+
+    <div class="os-card" data-os>
+      <button type="button" class="os-head">
+        <span class="os-emoji">🍏</span>
+        <span class="os-title">آيفون / آيباد (Safari)</span>
+        <svg class="os-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="os-steps">
+        <ol>
+          <li>افتح الموقع في متصفح <b>Safari</b> (وليس Chrome).</li>
+          <li>اضغط زر <b>المشاركة</b> (مربّع بسهم لأعلى) في الأسفل.</li>
+          <li>مرّر واختر <b>«إضافة إلى الشاشة الرئيسية»</b>.</li>
+          <li>اضغط <b>«إضافة»</b> في الأعلى.</li>
+        </ol>
+        <div class="hint">على الآيفون يجب استخدام متصفح Safari لتظهر هذه الخطوة.</div>
+      </div>
+    </div>
+
+    <div class="os-card" data-os>
+      <button type="button" class="os-head">
+        <span class="os-emoji">💻</span>
+        <span class="os-title">ويندوز / كمبيوتر (Chrome أو Edge)</span>
+        <svg class="os-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="os-steps">
+        <ol>
+          <li>افتح الموقع في <b>Chrome</b> أو <b>Edge</b>.</li>
+          <li>اضغط أيقونة التثبيت <b>⊕</b> في نهاية شريط العنوان، أو القائمة <b>⋮</b> ← <b>«تثبيت»</b>.</li>
+          <li>اضغط <b>«تثبيت»</b> لتفتح المتجر كتطبيق مستقل.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}
+{% block extra_js %}
+<script>
+  // فتح/إغلاق خطوات كل نظام
+  document.querySelectorAll('.os-head').forEach(function (h) {
+    h.addEventListener('click', function () { h.closest('.os-card').classList.toggle('open'); });
+  });
+
+  // زر التثبيت التلقائي (أندرويد/سطح المكتب المدعوم)
+  var deferred = null;
+  var installBtn = document.getElementById('installNow');
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault(); deferred = e; if (installBtn) installBtn.style.display = 'inline-block';
+  });
+  if (installBtn) installBtn.addEventListener('click', function () {
+    if (!deferred) { alert('اتبع الخطوات أدناه حسب نوع جهازك لتثبيت التطبيق.'); return; }
+    deferred.prompt();
+    deferred.userChoice.finally(function () { deferred = null; installBtn.style.display = 'none'; });
+  });
+
+  // فتح النظام المناسب تلقائياً حسب الجهاز
+  (function () {
+    var ua = navigator.userAgent || '';
+    var idx = /android/i.test(ua) ? 0 : (/iphone|ipad|ipod/i.test(ua) ? 1 : 2);
+    var cards = document.querySelectorAll('.os-card[data-os]');
+    if (cards[idx]) cards[idx].classList.add('open');
+  })();
+</script>
+{% endblock %}

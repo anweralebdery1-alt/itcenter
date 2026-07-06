@@ -4,11 +4,28 @@
 {% block extra_css %}
 <style>
   .cart-layout { display: grid; grid-template-columns: 1fr 340px; gap: 18px; margin-top: 24px; }
-  .cart-item { display: grid; grid-template-columns: 110px 1fr 130px; gap: 16px; padding: 16px; border-bottom: 1px solid var(--line); }
-  .cart-img { width: 110px; aspect-ratio: 1; border-radius: 8px; background: linear-gradient(135deg,#eaf2ff,#fff1dc); display:grid; place-items:center; font-weight:900; color:var(--blue); overflow:hidden; }
+  .cart-item { display: grid; grid-template-columns: 110px 1fr 160px; gap: 16px; padding: 16px; border-bottom: 1px solid var(--line); align-items: start; }
+  .cart-item > * { min-width: 0; }
+  .cart-img { width: 100%; aspect-ratio: 1; border-radius: 8px; background: linear-gradient(135deg,#eaf2ff,#fff1dc); display:grid; place-items:center; font-weight:900; color:var(--blue); overflow:hidden; }
   .cart-img img { width:100%; height:100%; object-fit:cover; }
-  .qty { border:1px solid var(--line); border-radius:8px; padding:8px; width:90px; }
-  @media (max-width: 900px) { .cart-layout { grid-template-columns: 1fr; } .cart-item { grid-template-columns: 80px 1fr; } .cart-actions { grid-column: 1 / -1; } }
+  .cart-name { font-weight: 800; color: var(--ink); display:block; }
+  .cart-remove { background:none; border:0; color:#dc3545; font-weight:700; font-size:13px; padding:0; cursor:pointer; }
+  .cart-remove:active { opacity:.6; }
+
+  /* أزرار زيادة/إنقاص الكمية */
+  .qty-stepper { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .qty-stepper .qbtn { width:38px; height:40px; border:0; background:#f1f5f9; font-size:22px; font-weight:800; color:var(--blue); cursor:pointer; line-height:1; }
+  .qty-stepper .qbtn:active { background:#dbe4f0; transform: scale(.94); }
+  .qty-stepper .qty { width:54px; text-align:center; border:0; border-inline-start:1px solid var(--line); border-inline-end:1px solid var(--line); padding:9px 0; font-weight:800; -moz-appearance:textfield; }
+  .qty-stepper .qty::-webkit-outer-spin-button, .qty-stepper .qty::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+
+  @media (max-width: 900px) {
+    .cart-layout { grid-template-columns: 1fr; }
+    .cart-item { grid-template-columns: 88px 1fr; column-gap: 12px; }
+    .cart-img { width: 88px; }
+    .cart-actions { grid-column: 1 / -1; margin-top: 10px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+    .cart-actions .qty-form { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  }
 </style>
 {% endblock %}
 {% block content %}
@@ -21,21 +38,25 @@
           <a class="cart-img" href="{% url 'product_detail' item.product.id %}">
             {% if item.product.image %}<img src="{{ item.product.image.url }}" alt="{{ item.product.name }}">{% else %}{{ item.product.name|first|upper }}{% endif %}
           </a>
-          <div>
-            <a class="fw-bold" href="{% url 'product_detail' item.product.id %}">{{ item.product.name }}</a>
-            <div class="text-muted mt-1">SKU: {{ item.product.sku }}</div>
+          <div class="cart-info">
+            <a class="cart-name" href="{% url 'product_detail' item.product.id %}">{{ item.product.name }}</a>
+            <div class="text-muted mt-1 small">SKU: {{ item.product.sku }}</div>
             <div class="fw-bold mt-2">{{ item.product.sell_price|money }} د.ع</div>
             <form method="post" action="{% url 'cart_remove' item.product.id %}" class="mt-2">
               {% csrf_token %}
-              <button class="btn btn-link text-danger small p-0" type="submit">حذف</button>
+              <button class="cart-remove" type="submit">حذف</button>
             </form>
           </div>
           <div class="cart-actions">
-            <form method="post" action="{% url 'cart_update' item.product.id %}">
+            <form method="post" action="{% url 'cart_update' item.product.id %}" class="qty-form">
               {% csrf_token %}
-              <label class="small text-muted">الكمية</label>
-              <input class="qty d-block mb-2" type="number" min="0" name="qty" value="{{ item.qty }}">
-              <button class="btn btn-outline-primary btn-sm" type="submit">تحديث</button>
+              <label class="small text-muted d-block mb-1">الكمية</label>
+              <div class="qty-stepper">
+                <button type="button" class="qbtn" data-step="-1" aria-label="إنقاص">−</button>
+                <input class="qty" type="number" min="1" name="qty" value="{{ item.qty }}">
+                <button type="button" class="qbtn" data-step="1" aria-label="زيادة">+</button>
+              </div>
+              <button class="btn btn-outline-primary btn-sm mt-2" type="submit">تحديث</button>
             </form>
             <div class="fw-bold mt-3">{{ item.line_total|money }} د.ع</div>
           </div>
@@ -52,4 +73,19 @@
     </aside>
   </div>
 </main>
+{% endblock %}
+{% block extra_js %}
+<script>
+  // أزرار زيادة/إنقاص الكمية تحدّث الرقم وترسل مباشرة
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.qbtn');
+    if (!b) return;
+    var form = b.closest('.qty-form');
+    var inp = form.querySelector('.qty');
+    var v = (parseInt(inp.value, 10) || 1) + parseInt(b.dataset.step, 10);
+    if (v < 1) v = 1;
+    inp.value = v;
+    form.submit();
+  });
+</script>
 {% endblock %}

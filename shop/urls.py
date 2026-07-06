@@ -12,6 +12,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('sitemap.xml', sitemap, {'sitemaps': SITEMAPS}, name='django.contrib.sitemaps.views.sitemap'),
     path('robots.txt', views.robots_txt, name='robots_txt'),
+    path('manifest.webmanifest', views.manifest, name='manifest'),
+    path('app/', views.install_app, name='install_app'),
     path('', views.home, name='home'),
     path('courses/', views.courses, name='courses'),
     path('videos/', views.videos, name='videos'),
