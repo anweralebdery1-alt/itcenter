@@ -226,20 +226,22 @@
         font-size: 11px; font-weight: 800; color: #475569; text-decoration: none;
         padding: 6px 0; position: relative; border-radius: 18px;
         -webkit-tap-highlight-color: transparent;
-        transition: transform .12s ease, background .12s ease, color .12s ease;
+        transition: transform .08s ease; /* الخلفية بلا تأخير حتى يظهر التفاعل فوراً */
       }
-      /* التفاعل: شكل بيضوي بلون مغاير خلف الزر عند الضغط أو التفعيل */
-      .bottom-nav a:active, .bottom-nav button:active {
+      /* التفاعل الفوري عند اللمس (شكل بيضوي بلون مغاير) — يظهر قبل انتقال الصفحة */
+      .bottom-nav a:active, .bottom-nav button:active,
+      .bottom-nav a.pressing, .bottom-nav button.pressing {
         transform: scale(.9);
-        background: color-mix(in srgb, var(--blue) 22%, transparent);
+        background: color-mix(in srgb, var(--blue) 24%, transparent);
       }
       .bottom-nav a.active, .bottom-nav .active {
         color: var(--blue);
         background: color-mix(in srgb, var(--blue) 13%, transparent);
       }
-      /* حبوب احتياطية للمتصفحات القديمة التي لا تدعم color-mix */
+      /* بديل للمتصفحات القديمة التي لا تدعم color-mix */
       @supports not (color: color-mix(in srgb, red, blue)) {
-        .bottom-nav a:active, .bottom-nav button:active { background: rgba(11,78,162,.20); }
+        .bottom-nav a:active, .bottom-nav button:active,
+        .bottom-nav a.pressing, .bottom-nav button.pressing { background: rgba(11,78,162,.22); }
         .bottom-nav a.active, .bottom-nav .active { background: rgba(11,78,162,.12); }
       }
       .bottom-nav svg { width: 23px; height: 23px; }
@@ -825,16 +827,32 @@
       });
     })();
 
-    // شريط «تحميل التطبيق»: إغلاقه يخفيه دائماً (يُحفظ محلياً)
+    // ردّ فعل فوري للأزرار السفلية عند اللمس (قبل انتقال الصفحة)
+    (function () {
+      var items = document.querySelectorAll('.bottom-nav a, .bottom-nav button');
+      items.forEach(function (el) {
+        el.addEventListener('pointerdown', function () { el.classList.add('pressing'); });
+        ['pointerup', 'pointercancel', 'pointerleave', 'blur'].forEach(function (ev) {
+          el.addEventListener(ev, function () { el.classList.remove('pressing'); });
+        });
+      });
+    })();
+
+    // شريط «تحميل التطبيق»
     (function () {
       var bar = document.getElementById('app-bar');
       if (!bar) return;
-      try { if (localStorage.getItem('hideAppBar') === '1') { bar.remove(); return; } } catch (e) {}
+      // إن كان المستخدم يفتح الموقع كتطبيق مثبّت (وضع standalone) فلا نعرض الشريط
+      var installed = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+                      window.navigator.standalone === true;
+      if (installed) { bar.remove(); return; }
+      // في المتصفح: يظهر كل جلسة؛ زر ✕ يخفيه لهذه الجلسة فقط ويعود في الزيارة القادمة
+      try { if (sessionStorage.getItem('hideAppBar') === '1') { bar.remove(); return; } } catch (e) {}
       bar.hidden = false;
       var closeBtn = bar.querySelector('.app-bar-close');
       if (closeBtn) closeBtn.addEventListener('click', function () {
         bar.remove();
-        try { localStorage.setItem('hideAppBar', '1'); } catch (e) {}
+        try { sessionStorage.setItem('hideAppBar', '1'); } catch (e) {}
       });
     })();
   </script>
