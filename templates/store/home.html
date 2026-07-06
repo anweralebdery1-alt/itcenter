@@ -181,7 +181,7 @@
               {% if p.is_offer %}<span class="badge-pill badge-offer">عرض خاص</span>{% endif %}
               {% if p.quantity <= 0 %}<span class="badge-pill badge-out">غير متوفر</span>{% endif %}
             </div>
-            {% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}
+            {% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async" width="300" height="300">{% else %}{{ p.name|first|upper }}{% endif %}
           </div>
         </a>
         <div class="product-info">
@@ -247,7 +247,7 @@
       <div class="product-card">
         <a href="{% url 'product_detail' p.id %}">
           <div class="product-image">
-            {% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}
+            {% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async" width="300" height="300">{% else %}{{ p.name|first|upper }}{% endif %}
           </div>
         </a>
         <div class="product-info">

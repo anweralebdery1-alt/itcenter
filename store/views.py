@@ -3,7 +3,7 @@ import re
 import secrets
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 
 
@@ -118,7 +118,7 @@ def _otp_wait_seconds(phone):
         if oldest:
             hourly = int(3600 - (now - oldest.created_at).total_seconds()) + 1
     return max(0, cooldown, hourly)
-from django.db.models import Count, F, Prefetch, Q, Sum
+from django.db.models import Avg, Count, F, Prefetch, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
@@ -131,6 +131,7 @@ from .models import (
     OrderItem,
     PhoneOTP,
     Product,
+    Review,
     SiteSection,
     SiteSettings,
     TeamMember,
@@ -305,14 +306,36 @@ def product_detail(request, pk):
         similar = Product.objects.filter(category=product.category).exclude(pk=product.pk)[:6]
     else:
         similar = Product.objects.exclude(pk=product.pk).order_by('-created_at')[:6]
+    reviews = product.reviews.filter(is_approved=True)
+    stats = reviews.aggregate(avg=Avg('rating'), count=Count('id'))
     context = _base_context(request)
     context.update({
         'product': product,
         'gallery_images': list(product.gallery_images.all()),
         'similar': similar,
         'visited_products': _visited_products(request, exclude_id=product.id),
+        'reviews': reviews,
+        'review_avg': round(stats['avg'] or 0, 1),
+        'review_avg_int': int(round(stats['avg'] or 0)),
+        'review_count': stats['count'],
+        'review_ok': request.GET.get('review') == 'ok',
     })
     return render(request, 'store/product_detail.html', context)
+
+
+@require_POST
+def submit_review(request, pk):
+    product = get_object_or_404(Product, pk=pk)
+    name = (request.POST.get('name') or '').strip()[:120]
+    comment = (request.POST.get('comment') or '').strip()[:2000]
+    try:
+        rating = int(request.POST.get('rating', 5))
+    except (TypeError, ValueError):
+        rating = 5
+    rating = max(1, min(5, rating))
+    if name:
+        Review.objects.create(product=product, name=name, rating=rating, comment=comment)
+    return redirect(product.get_absolute_url() + '?review=ok#reviews')
 
 
 def _remember_product(request, product_id):
@@ -397,6 +420,56 @@ def manifest(request):
         'icons': icons,
     }
     return JsonResponse(data, content_type='application/manifest+json')
+
+
+def service_worker(request):
+    """Service Worker: تصفّح أسرع + عمل جزئي بلا إنترنت + تحديث تلقائي للمحتوى."""
+    js = r"""
+const CACHE = 'itc-cache-v1';
+self.addEventListener('install', function (e) { self.skipWaiting(); });
+self.addEventListener('activate', function (e) {
+  e.waitUntil((async function () {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
+    await self.clients.claim();
+  })());
+});
+self.addEventListener('fetch', function (e) {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== location.origin) return;
+  // صفحات HTML: الشبكة أولاً ليظهر آخر تحديث دائماً عند توفّر الإنترنت
+  if (req.mode === 'navigate') {
+    e.respondWith((async function () {
+      try {
+        const fresh = await fetch(req);
+        const cache = await caches.open(CACHE);
+        cache.put(req, fresh.clone());
+        return fresh;
+      } catch (err) {
+        return (await caches.match(req)) || (await caches.match('/'));
+      }
+    })());
+    return;
+  }
+  // الأصول الثابتة والصور: الكاش أولاً لتسريع الزيارات المتكررة
+  if (/\.(css|js|png|jpg|jpeg|webp|svg|gif|ico|woff2?)$/i.test(url.pathname) ||
+      url.pathname.indexOf('/static/') === 0 || url.pathname.indexOf('/media/') === 0) {
+    e.respondWith((async function () {
+      const cached = await caches.match(req);
+      if (cached) return cached;
+      try {
+        const fresh = await fetch(req);
+        const cache = await caches.open(CACHE);
+        cache.put(req, fresh.clone());
+        return fresh;
+      } catch (err) { return cached; }
+    })());
+  }
+});
+"""
+    return HttpResponse(js, content_type='application/javascript')
 
 
 @ensure_csrf_cookie

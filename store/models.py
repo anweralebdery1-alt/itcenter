@@ -124,6 +124,19 @@ class SiteSettings(ImageCompressMixin, models.Model):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
 
+    @property
+    def whatsapp_intl(self):
+        """رقم واتساب بصيغة دولية (9647...) لاستخدامه في روابط wa.me."""
+        raw = ''.join(ch for ch in (self.whatsapp or self.phone or '') if ch.isdigit())
+        if not raw:
+            return ''
+        if raw.startswith('964'):
+            return raw
+        if raw.startswith('0'):
+            raw = raw[1:]
+        return '964' + raw
+
+
 class Product(ImageCompressMixin, models.Model):
     image_fields = ('image',)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
@@ -134,6 +147,8 @@ class Product(ImageCompressMixin, models.Model):
     description = models.TextField(blank=True)
     specifications = models.JSONField(default=dict, blank=True)
     image = models.ImageField(upload_to='products/', blank=True, null=True)
+    # نسخة مصغّرة خفيفة جداً للعرض في قوائم المنتجات (تُولَّد تلقائياً)
+    thumbnail = models.ImageField(upload_to='products/thumbs/', blank=True, null=True, editable=False)
     buy_price = models.FloatField(default=0)
     sell_price = models.FloatField(default=0)
     quantity = models.IntegerField(default=0)
@@ -155,6 +170,45 @@ class Product(ImageCompressMixin, models.Model):
                 logger.exception('Failed to add branding to product image')
                 return _compress_imagefield(field_file)
         return super().process_image_field(field_name, field_file)
+
+    def save(self, *args, **kwargs):
+        img = getattr(self, 'image', None)
+        new_image = bool(img) and not getattr(img, '_committed', True)
+        if new_image:
+            self.thumbnail = None  # صورة جديدة → أعد توليد المصغّرة
+        super().save(*args, **kwargs)
+        self._ensure_thumbnail()
+
+    def _ensure_thumbnail(self):
+        """يولّد نسخة مصغّرة خفيفة جداً من الصورة الرئيسية إن لم تكن موجودة."""
+        if not self.image or self.thumbnail:
+            return
+        try:
+            self.image.open('rb')
+            result = _compress_imagefield(self.image, max_dim=430, quality=62)
+        except Exception:
+            logger.exception('thumbnail generation failed')
+            return
+        finally:
+            try:
+                self.image.close()
+            except Exception:
+                pass
+        if not result:
+            return
+        buffer, ext = result
+        base = os.path.splitext(os.path.basename(self.image.name))[0]
+        self.thumbnail.save(f"{base}-thumb.{ext}", ContentFile(buffer.read()), save=False)
+        super().save(update_fields=['thumbnail'])
+
+    @property
+    def list_image_url(self):
+        """رابط الصورة الخفيفة للقوائم (المصغّرة إن وُجدت وإلا الأصلية)."""
+        if self.thumbnail:
+            return self.thumbnail.url
+        if self.image:
+            return self.image.url
+        return ''
 
     def __str__(self): return self.name
 
@@ -217,6 +271,24 @@ class ProductImage(ImageCompressMixin, models.Model):
 
     def __str__(self):
         return f'{self.product} - صورة {self.position}'
+
+
+class Review(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews')
+    name = models.CharField(max_length=120, verbose_name='الاسم')
+    rating = models.PositiveSmallIntegerField(
+        default=5, validators=[MinValueValidator(1), MaxValueValidator(5)], verbose_name='التقييم (نجوم)')
+    comment = models.TextField(blank=True, verbose_name='التعليق')
+    is_approved = models.BooleanField(default=True, verbose_name='معتمَد للنشر')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+        verbose_name = 'تقييم'
+        verbose_name_plural = 'التقييمات'
+
+    def __str__(self):
+        return f'{self.product} - {self.rating}★ - {self.name}'
 
 
 class Customer(models.Model):

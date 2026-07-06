@@ -13,6 +13,7 @@ from .models import (
     PhoneOTP,
     Product,
     ProductImage,
+    Review,
     SaleReservation,
     Series,
     SiteSection,
@@ -216,6 +217,15 @@ class ProductAdmin(admin.ModelAdmin):
     def unmark_featured(self, request, queryset):
         updated = queryset.update(is_featured=False)
         self.message_user(request, f'تم إلغاء تمييز {updated} منتجاً.')
+
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ('product', 'name', 'rating', 'is_approved', 'created_at')
+    list_editable = ('is_approved',)
+    list_filter = ('is_approved', 'rating', 'created_at')
+    search_fields = ('product__name', 'name', 'comment')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(Customer)
