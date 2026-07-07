@@ -126,15 +126,18 @@ class SiteSettings(ImageCompressMixin, models.Model):
 
     @property
     def whatsapp_intl(self):
-        """رقم واتساب بصيغة دولية (9647...) لاستخدامه في روابط wa.me."""
-        raw = ''.join(ch for ch in (self.whatsapp or self.phone or '') if ch.isdigit())
-        if not raw:
+        """رقم واتساب بصيغة دولية (9647...) من حقل واتساب فقط (لا يرجع لحقل الهاتف).
+        يقتطع أول رقم إن احتوى الحقل أكثر من رقم — أرقام العراق: 10 خانات محلية تبدأ بـ7."""
+        d = ''.join(ch for ch in (self.whatsapp or '') if ch.isdigit())
+        if not d:
             return ''
-        if raw.startswith('964'):
-            return raw
-        if raw.startswith('0'):
-            raw = raw[1:]
-        return '964' + raw
+        if d.startswith('964'):
+            d = d[:13]        # 964 + 10 خانات
+        elif d.startswith('0'):
+            d = d[1:11]       # أزل الصفر ثم خذ 10 خانات
+        else:
+            d = d[:10]
+        return d if d.startswith('964') else '964' + d
 
 
 class Product(ImageCompressMixin, models.Model):
