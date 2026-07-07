@@ -109,7 +109,7 @@
         <div><strong>فيديوهات تعليمية</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
       <div class="showcase-thumbs">
-        {% for v in home_videos|slice:":4" %}<span class="thumb">{% if v.thumbnail %}<img src="{{ v.thumbnail.url }}" alt="{{ v.title }}">{% else %}▶{% endif %}</span>{% empty %}<span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span>{% endfor %}
+        {% for v in home_videos|slice:":4" %}<span class="thumb">{% if v.thumbnail %}<img src="{{ v.thumbnail.url }}" alt="{{ v.title }}" loading="lazy">{% elif v.youtube_id %}<img src="https://img.youtube.com/vi/{{ v.youtube_id }}/hqdefault.jpg" alt="{{ v.title }}" loading="lazy">{% else %}▶{% endif %}</span>{% empty %}<span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span>{% endfor %}
       </div>
     </a>
     <a class="showcase-card" href="/?sort=best#products">

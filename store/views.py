@@ -402,9 +402,33 @@ def video_detail(request, pk):
     context = _base_context(request)
     context.update({
         'video': video,
+        'linked_components': _linked_components(video.components_list),
         'more_videos': EducationalVideo.objects.filter(is_active=True).exclude(pk=video.pk).order_by('-created_at')[:6],
     })
     return render(request, 'store/video_detail.html', context)
+
+
+def _linked_components(components_list):
+    """يربط كل مكوّن بمنتج مطابق في المتجر إن وُجد (فيصبح رابطاً)."""
+    from django.urls import reverse
+    products = list(Product.objects.values('id', 'name'))
+    result = []
+    for line in components_list:
+        low = line.lower()
+        line_tokens = set(re.findall(r'[a-z0-9\-]{4,}', low))
+        match = None
+        for p in products:
+            pname = (p['name'] or '').strip().lower()
+            if not pname:
+                continue
+            if pname in low or low in pname or (line_tokens & set(re.findall(r'[a-z0-9\-]{4,}', pname))):
+                match = p
+                break
+        result.append({
+            'text': line,
+            'url': reverse('product_detail', args=[match['id']]) if match else None,
+        })
+    return result
 
 
 def about(request):

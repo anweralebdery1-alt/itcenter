@@ -402,6 +402,8 @@ class EducationalVideo(ImageCompressMixin, models.Model):
     thumbnail = models.ImageField(upload_to='videos/', blank=True, null=True)
     components = models.TextField(blank=True, verbose_name='المكوّنات المطلوبة',
                                  help_text='اكتب مكوّناً في كل سطر.')
+    wiring = models.TextField(blank=True, verbose_name='طريقة التوصيل',
+                             help_text='كل توصيلة في سطر، مثل: طرف الحسّاس Trig ← الطرف 9.')
     code = models.TextField(blank=True, verbose_name='الكود (Arduino)')
     source = models.CharField(max_length=300, blank=True, verbose_name='المصدر',
                               help_text='اسم صاحب الفيديو/المصدر (للأمانة).')
@@ -429,6 +431,18 @@ class EducationalVideo(ImageCompressMixin, models.Model):
     @property
     def components_list(self):
         return [line.strip() for line in (self.components or '').splitlines() if line.strip()]
+
+    @property
+    def wiring_list(self):
+        return [line.strip() for line in (self.wiring or '').splitlines() if line.strip()]
+
+    @property
+    def thumbnail_url(self):
+        if self.thumbnail:
+            return self.thumbnail.url
+        if self.youtube_id:
+            return f'https://img.youtube.com/vi/{self.youtube_id}/hqdefault.jpg'
+        return ''
 
 
 class DownloadableFile(models.Model):
