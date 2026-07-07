@@ -274,8 +274,9 @@ class CourseAdmin(admin.ModelAdmin):
 class EducationalVideoAdmin(admin.ModelAdmin):
     list_display = ('title', 'video_url', 'is_active', 'created_at')
     list_editable = ('is_active',)
-    search_fields = ('title', 'description')
+    search_fields = ('title', 'description', 'components')
     inlines = (DownloadableFileInline,)
+    fields = ('title', 'video_url', 'thumbnail', 'description', 'components', 'code', 'source', 'is_active')
 
 
 @admin.register(DownloadableFile)

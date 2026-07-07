@@ -279,6 +279,7 @@ class ProductImage(ImageCompressMixin, models.Model):
 class Review(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews')
     name = models.CharField(max_length=120, verbose_name='الاسم')
+    phone = models.CharField(max_length=50, blank=True, verbose_name='هاتف المقيّم')
     rating = models.PositiveSmallIntegerField(
         default=5, validators=[MinValueValidator(1), MaxValueValidator(5)], verbose_name='التقييم (نجوم)')
     comment = models.TextField(blank=True, verbose_name='التعليق')
@@ -399,11 +400,35 @@ class EducationalVideo(ImageCompressMixin, models.Model):
     description = models.TextField(blank=True)
     video_url = models.URLField(blank=True)
     thumbnail = models.ImageField(upload_to='videos/', blank=True, null=True)
+    components = models.TextField(blank=True, verbose_name='المكوّنات المطلوبة',
+                                 help_text='اكتب مكوّناً في كل سطر.')
+    code = models.TextField(blank=True, verbose_name='الكود (Arduino)')
+    source = models.CharField(max_length=300, blank=True, verbose_name='المصدر',
+                              help_text='اسم صاحب الفيديو/المصدر (للأمانة).')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.title
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('video_detail', args=[self.pk])
+
+    @property
+    def youtube_id(self):
+        import re
+        m = re.search(r'(?:v=|youtu\.be/|/embed/|/shorts/|/live/)([A-Za-z0-9_-]{11})', self.video_url or '')
+        return m.group(1) if m else ''
+
+    @property
+    def youtube_embed_url(self):
+        vid = self.youtube_id
+        return f'https://www.youtube.com/embed/{vid}' if vid else ''
+
+    @property
+    def components_list(self):
+        return [line.strip() for line in (self.components or '').splitlines() if line.strip()]
 
 
 class DownloadableFile(models.Model):

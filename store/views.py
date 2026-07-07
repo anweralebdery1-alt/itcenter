@@ -308,6 +308,13 @@ def product_detail(request, pk):
         similar = Product.objects.exclude(pk=product.pk).order_by('-created_at')[:6]
     reviews = product.reviews.filter(is_approved=True)
     stats = reviews.aggregate(avg=Avg('rating'), count=Count('id'))
+    phone = request.session.get('customer_phone')
+    has_purchased = _customer_has_purchased(phone, product)
+    already_reviewed = bool(phone) and product.reviews.filter(phone=phone).exists()
+    customer_name = ''
+    if phone:
+        cust = Customer.objects.filter(phone=phone).first()
+        customer_name = cust.full_name if cust else ''
     context = _base_context(request)
     context.update({
         'product': product,
@@ -319,13 +326,33 @@ def product_detail(request, pk):
         'review_avg_int': int(round(stats['avg'] or 0)),
         'review_count': stats['count'],
         'review_ok': request.GET.get('review') == 'ok',
+        'is_logged_in': bool(phone),
+        'can_review': has_purchased and not already_reviewed,
+        'has_purchased': has_purchased,
+        'already_reviewed': already_reviewed,
+        'customer_name': customer_name,
     })
     return render(request, 'store/product_detail.html', context)
+
+
+def _customer_has_purchased(phone, product):
+    """هل اشترى صاحب هذا الرقم هذا المنتج فعلاً (طلب غير ملغى)؟"""
+    if not phone:
+        return False
+    return OrderItem.objects.filter(
+        order__phone=phone, product=product,
+    ).exclude(order__status='cancelled').exists()
 
 
 @require_POST
 def submit_review(request, pk):
     product = get_object_or_404(Product, pk=pk)
+    phone = request.session.get('customer_phone')
+    # التقييم من حق من أكمل الشراء فقط
+    if not _customer_has_purchased(phone, product):
+        return redirect(product.get_absolute_url() + '?review=denied#reviews')
+    if product.reviews.filter(phone=phone).exists():
+        return redirect(product.get_absolute_url() + '?review=dup#reviews')
     name = (request.POST.get('name') or '').strip()[:120]
     comment = (request.POST.get('comment') or '').strip()[:2000]
     try:
@@ -333,8 +360,10 @@ def submit_review(request, pk):
     except (TypeError, ValueError):
         rating = 5
     rating = max(1, min(5, rating))
-    if name:
-        Review.objects.create(product=product, name=name, rating=rating, comment=comment)
+    if not name:
+        cust = Customer.objects.filter(phone=phone).first()
+        name = (cust.full_name if cust else '') or 'زبون'
+    Review.objects.create(product=product, name=name, phone=phone, rating=rating, comment=comment)
     return redirect(product.get_absolute_url() + '?review=ok#reviews')
 
 
@@ -366,6 +395,16 @@ def videos(request):
     context = _base_context(request)
     context.update({'videos': EducationalVideo.objects.filter(is_active=True).order_by('-created_at')})
     return render(request, 'store/videos.html', context)
+
+
+def video_detail(request, pk):
+    video = get_object_or_404(EducationalVideo, pk=pk, is_active=True)
+    context = _base_context(request)
+    context.update({
+        'video': video,
+        'more_videos': EducationalVideo.objects.filter(is_active=True).exclude(pk=video.pk).order_by('-created_at')[:6],
+    })
+    return render(request, 'store/video_detail.html', context)
 
 
 def about(request):

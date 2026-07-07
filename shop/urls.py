@@ -18,6 +18,7 @@ urlpatterns = [
     path('', views.home, name='home'),
     path('courses/', views.courses, name='courses'),
     path('videos/', views.videos, name='videos'),
+    path('videos/<int:pk>/', views.video_detail, name='video_detail'),
     path('about/', views.about, name='about'),
     path('account/', views.account, name='account'),
     path('account/details/', views.account_details, name='account_details'),

@@ -1,0 +1,105 @@
+{% extends 'store/base.html' %}
+{% block title %}{{ video.title }} | فيديوهات تعليمية | {{ settings.site_name }}{% endblock %}
+{% block meta_description %}{{ video.description|striptags|truncatechars:160 }}{% endblock %}
+{% block extra_css %}
+<style>
+  .vid-wrap { max-width: 860px; margin: 20px auto; }
+  .vid-player { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; background: #000; box-shadow: 0 10px 30px rgba(2,8,23,.18); }
+  .vid-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .vid-fallback { display: grid; place-items: center; height: 100%; color: #fff; text-align: center; padding: 20px; }
+  .vid-title { font-size: 24px; font-weight: 900; margin-top: 18px; }
+  .vid-source { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .vid-section { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-top: 16px; }
+  .vid-section h3 { font-size: 17px; font-weight: 900; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .comp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .comp-list li { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .comp-list li::before { content: "🔧"; }
+  .code-block { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 16px; overflow-x: auto; direction: ltr; text-align: left; }
+  .code-block pre { margin: 0; font-family: Consolas, "Courier New", monospace; font-size: 13px; line-height: 1.6; white-space: pre; }
+  .copy-code { float: left; background: var(--blue); color: #fff; border: 0; border-radius: 8px; padding: 4px 12px; font-weight: 700; font-size: 12px; cursor: pointer; }
+  .more-videos { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .more-videos a { text-decoration: none; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .more-videos .mv-thumb { aspect-ratio: 16/9; background: linear-gradient(135deg,#eaf2ff,#fff1dc); display: grid; place-items: center; font-size: 26px; }
+  .more-videos .mv-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .more-videos .mv-title { padding: 8px 10px; font-weight: 700; font-size: 13px; }
+</style>
+{% endblock %}
+{% block content %}
+<main class="container-wide">
+  <div class="vid-wrap">
+    <nav class="breadcrumbs" style="display:flex;gap:6px;margin:14px 0;font-size:13px;color:var(--muted)">
+      <a href="/" style="color:var(--blue);font-weight:700;text-decoration:none">الرئيسية</a> ›
+      <a href="{% url 'videos' %}" style="color:var(--blue);font-weight:700;text-decoration:none">فيديوهات تعليمية</a> ›
+      <span>{{ video.title }}</span>
+    </nav>
+
+    <div class="vid-player">
+      {% if video.youtube_embed_url %}
+        <iframe src="{{ video.youtube_embed_url }}" title="{{ video.title }}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+      {% elif video.video_url %}
+        <div class="vid-fallback">
+          <a class="btn btn-orange" href="{{ video.video_url }}" target="_blank" rel="noopener">▶ مشاهدة الفيديو</a>
+        </div>
+      {% else %}
+        <div class="vid-fallback">لا يوجد فيديو مرفق بعد.</div>
+      {% endif %}
+    </div>
+
+    <h1 class="vid-title">{{ video.title }}</h1>
+    {% if video.source %}<div class="vid-source">المصدر: {{ video.source }}</div>{% endif %}
+
+    {% if video.description %}
+    <div class="vid-section">
+      <h3>📘 الشرح</h3>
+      <div>{{ video.description|linebreaks }}</div>
+    </div>
+    {% endif %}
+
+    {% if video.components_list %}
+    <div class="vid-section">
+      <h3>🧩 المكوّنات المطلوبة</h3>
+      <ul class="comp-list">
+        {% for c in video.components_list %}<li>{{ c }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if video.code %}
+    <div class="vid-section">
+      <h3>💻 الكود <button type="button" class="copy-code" id="copyBtn">نسخ الكود</button></h3>
+      <div class="code-block"><pre id="codeText">{{ video.code }}</pre></div>
+    </div>
+    {% endif %}
+
+    {% if video.files.all %}
+    <div class="vid-section">
+      <h3>⬇ ملفات للتحميل</h3>
+      {% for file in video.files.all %}
+        <a class="btn btn-outline-primary w-100 mt-2" href="{{ file.file.url }}">⬇ {{ file.title }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if more_videos %}
+    <h3 class="fw-bold mt-4 mb-3">فيديوهات أخرى</h3>
+    <div class="more-videos">
+      {% for v in more_videos %}
+        <a href="{% url 'video_detail' v.pk %}">
+          <div class="mv-thumb">{% if v.thumbnail %}<img src="{{ v.thumbnail.url }}" alt="{{ v.title }}" loading="lazy">{% else %}▶{% endif %}</div>
+          <div class="mv-title">{{ v.title }}</div>
+        </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}
+{% block extra_js %}
+<script>
+  var btn = document.getElementById('copyBtn');
+  if (btn) btn.addEventListener('click', function () {
+    var t = document.getElementById('codeText').innerText;
+    navigator.clipboard.writeText(t).then(function () { btn.textContent = 'تم النسخ ✓'; setTimeout(function () { btn.textContent = 'نسخ الكود'; }, 1500); });
+  });
+</script>
+{% endblock %}
