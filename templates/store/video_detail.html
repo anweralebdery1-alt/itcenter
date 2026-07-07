@@ -43,17 +43,15 @@
     </nav>
 
     <div class="vid-player" id="vidPlayer" data-embed="{{ video.youtube_embed_url }}">
-      {% if video.youtube_embed_url %}
-        <button type="button" class="vid-facade" id="vidFacade"{% if video.thumbnail_url %} style="background-image:url('{{ video.thumbnail_url }}')"{% endif %}>
+      {% if video.video_url %}
+        <a class="vid-facade" href="{{ video.video_url }}" target="_blank" rel="noopener"{% if video.thumbnail_url %} style="background-image:url('{{ video.thumbnail_url }}')"{% endif %}>
           <span class="vid-play">▶</span>
-        </button>
-      {% elif video.video_url %}
-        <div class="vid-fallback"><a class="btn btn-orange" href="{{ video.video_url }}" target="_blank" rel="noopener">▶ مشاهدة الفيديو</a></div>
+        </a>
       {% else %}
         <div class="vid-fallback">لا يوجد فيديو مرفق بعد.</div>
       {% endif %}
     </div>
-    {% if video.video_url %}<a class="yt-link" href="{{ video.video_url }}" target="_blank" rel="noopener">أو شاهده مباشرة على YouTube ↗</a>{% endif %}
+    {% if video.video_url %}<a class="yt-link" href="{{ video.video_url }}" target="_blank" rel="noopener">▶ مشاهدة الفيديو على YouTube ↗</a>{% endif %}
 
     <h1 class="vid-title">{{ video.title }}</h1>
     {% if video.source %}<div class="vid-source">المصدر: {{ video.source }}</div>{% endif %}
@@ -107,7 +105,7 @@
     <div class="more-videos">
       {% for v in more_videos %}
         <a href="{% url 'video_detail' v.pk %}">
-          <div class="mv-thumb">{% if v.thumbnail %}<img src="{{ v.thumbnail.url }}" alt="{{ v.title }}" loading="lazy">{% else %}▶{% endif %}</div>
+          <div class="mv-thumb">{% if v.thumbnail_url %}<img src="{{ v.thumbnail_url }}" alt="{{ v.title }}" loading="lazy">{% else %}▶{% endif %}</div>
           <div class="mv-title">{{ v.title }}</div>
         </a>
       {% endfor %}
@@ -118,14 +116,6 @@
 {% endblock %}
 {% block extra_js %}
 <script>
-  // تشغيل الفيديو داخل الموقع عند الضغط على الصورة (تحميل مؤجّل)
-  var facade = document.getElementById('vidFacade');
-  if (facade) facade.addEventListener('click', function () {
-    var p = document.getElementById('vidPlayer');
-    var url = p.dataset.embed + '?autoplay=1&rel=0';
-    p.innerHTML = '<iframe src="' + url + '" title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
-  });
-
   var btn = document.getElementById('copyBtn');
   if (btn) btn.addEventListener('click', function () {
     var t = document.getElementById('codeText').innerText;
