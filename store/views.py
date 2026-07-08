@@ -297,7 +297,7 @@ def home(request):
         'newest': list(Product.objects.order_by('-created_at')[:4]),
         # الدورات والفيديوهات لعرضها في الرئيسية (بطاقات عرض + الدورات كمنتجات)
         'home_courses': list(Course.objects.filter(is_active=True).order_by('-created_at')[:8]),
-        'home_videos': list(EducationalVideo.objects.filter(is_active=True).order_by('-created_at')[:4]),
+        'home_videos': list(EducationalVideo.objects.filter(is_active=True).order_by('project_number')[:4]),
         'visited_products': _visited_products(request),
         'search': search,
         'selected_category': category_id,
@@ -406,7 +406,7 @@ def courses(request):
 
 def videos(request):
     context = _base_context(request)
-    context.update({'videos': EducationalVideo.objects.filter(is_active=True).order_by('-created_at')})
+    context.update({'videos': EducationalVideo.objects.filter(is_active=True).order_by('project_number')})
     return render(request, 'store/videos.html', context)
 
 
@@ -416,7 +416,7 @@ def video_detail(request, pk):
     context.update({
         'video': video,
         'linked_components': _linked_components(video.components_list),
-        'more_videos': EducationalVideo.objects.filter(is_active=True).exclude(pk=video.pk).order_by('-created_at')[:6],
+        'more_videos': EducationalVideo.objects.filter(is_active=True).exclude(pk=video.pk).order_by('project_number')[:6],
     })
     return render(request, 'store/video_detail.html', context)
 

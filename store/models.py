@@ -407,8 +407,13 @@ class EducationalVideo(ImageCompressMixin, models.Model):
     code = models.TextField(blank=True, verbose_name='الكود (Arduino)')
     source = models.CharField(max_length=300, blank=True, verbose_name='المصدر',
                               help_text='اسم صاحب الفيديو/المصدر (للأمانة).')
+    project_number = models.IntegerField(default=0, verbose_name='رقم المشروع',
+                                        help_text='رقم متسلسل لتسهيل البحث عن المشروع.')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('project_number', 'id')
 
     def __str__(self):
         return self.title
