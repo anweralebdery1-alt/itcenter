@@ -272,11 +272,25 @@ class CourseAdmin(admin.ModelAdmin):
 
 @admin.register(EducationalVideo)
 class EducationalVideoAdmin(admin.ModelAdmin):
-    list_display = ('title', 'video_url', 'is_active', 'created_at')
+    list_display = ('project_number', 'title', 'video_url', 'is_active', 'created_at')
+    list_display_links = ('title',)
     list_editable = ('is_active',)
+    ordering = ('project_number', 'id')
     search_fields = ('title', 'description', 'components')
     inlines = (DownloadableFileInline,)
     fields = ('title', 'video_url', 'thumbnail', 'description', 'components', 'wiring', 'code', 'source', 'is_active')
+    actions = ('renumber_projects',)
+
+    @admin.action(description='إعادة ترقيم المشاريع بالتسلسل (بلا فراغات)')
+    def renumber_projects(self, request, queryset):
+        import re
+        n = 0
+        for n, video in enumerate(EducationalVideo.objects.order_by('project_number', 'id'), start=1):
+            title = re.sub(r'^مشروع\s*\d+\s*[:：]\s*', '', video.title).strip()
+            video.project_number = n
+            video.title = f'مشروع {n}: {title}'
+            video.save(update_fields=['project_number', 'title'])
+        self.message_user(request, f'تمت إعادة ترقيم {n} مشروعاً بالتسلسل.')
 
 
 @admin.register(DownloadableFile)
