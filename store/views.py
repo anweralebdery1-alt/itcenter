@@ -408,25 +408,38 @@ def video_detail(request, pk):
     return render(request, 'store/video_detail.html', context)
 
 
+_AR_STOP = {'مع', 'الى', 'على', 'عبر', 'من', 'في', 'او', 'كل', 'ثم', 'اسلاك', 'توصيل'}
+
+
+def _normalize_ar(text):
+    """يوحّد النص العربي: يزيل التشكيل والهمزات ويوحّد الألف والتاء المربوطة والألف المقصورة."""
+    text = (text or '').lower()
+    text = re.sub(r'[ً-ْٰـ]', '', text)  # تشكيل + تطويل
+    for a, b in (('أ', 'ا'), ('إ', 'ا'), ('آ', 'ا'), ('ؤ', 'و'), ('ئ', 'ي'), ('ء', ''), ('ة', 'ه'), ('ى', 'ي')):
+        text = text.replace(a, b)
+    return text
+
+
+def _match_tokens(text):
+    toks = re.findall(r'[a-z0-9ء-ي]+', _normalize_ar(text))
+    return {t for t in toks if len(t) >= 3 and t not in _AR_STOP}
+
+
 def _linked_components(components_list):
-    """يربط كل مكوّن بمنتج مطابق في المتجر إن وُجد (فيصبح رابطاً)."""
+    """يربط كل مكوّن بأقرب منتج مطابق في المتجر (بأكثر الكلمات المشتركة) إن وُجد."""
     from django.urls import reverse
-    products = list(Product.objects.values('id', 'name'))
+    products = [(p['id'], _match_tokens(p['name'])) for p in Product.objects.values('id', 'name')]
     result = []
     for line in components_list:
-        low = line.lower()
-        line_tokens = set(re.findall(r'[a-z0-9\-]{4,}', low))
-        match = None
-        for p in products:
-            pname = (p['name'] or '').strip().lower()
-            if not pname:
-                continue
-            if pname in low or low in pname or (line_tokens & set(re.findall(r'[a-z0-9\-]{4,}', pname))):
-                match = p
-                break
+        line_tokens = _match_tokens(line)
+        best_id, best_score = None, 0
+        for pid, ptoks in products:
+            score = len(line_tokens & ptoks)
+            if score > best_score:
+                best_score, best_id = score, pid
         result.append({
             'text': line,
-            'url': reverse('product_detail', args=[match['id']]) if match else None,
+            'url': reverse('product_detail', args=[best_id]) if best_id else None,
         })
     return result
 
