@@ -151,9 +151,55 @@
   </section>
   {% endif %}
 
+  {% if search and search_videos %}
+  <div class="toolbar"><div><h2 class="m-0 fw-bold"><span class="section-tag"></span>فيديوهات مطابقة ({{ search_videos|length }})</h2></div></div>
+  <div class="product-grid">
+    {% for v in search_videos %}
+      <div class="product-card">
+        <a href="{% url 'video_detail' v.pk %}">
+          <div class="product-image">
+            <div class="card-badges"><span class="badge-pill badge-new">فيديو تعليمي</span></div>
+            {% if v.thumbnail_url %}<img src="{{ v.thumbnail_url }}" alt="{{ v.title }}" loading="lazy">{% else %}▶{% endif %}
+          </div>
+        </a>
+        <div class="product-info">
+          <a href="{% url 'video_detail' v.pk %}" class="product-name d-block">{{ v.title }}</a>
+          <div class="product-desc">{{ v.description|truncatechars:70 }}</div>
+          <div class="spacer"></div>
+          <div class="card-actions">
+            <a class="btn btn-blue w-100" href="{% url 'video_detail' v.pk %}">▶ شاهد وتعلّم</a>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if search and search_courses %}
+  <div class="toolbar"><div><h2 class="m-0 fw-bold"><span class="section-tag"></span>دورات مطابقة ({{ search_courses|length }})</h2></div></div>
+  <div class="product-grid">
+    {% for c in search_courses %}
+      <div class="product-card">
+        <a href="{% url 'courses' %}">
+          <div class="product-image">
+            <div class="card-badges"><span class="badge-pill badge-new">دورة</span></div>
+            {% if c.image %}<img src="{{ c.image.url }}" alt="{{ c.title }}" loading="lazy">{% else %}🎓{% endif %}
+          </div>
+        </a>
+        <div class="product-info">
+          <a href="{% url 'courses' %}" class="product-name d-block">{{ c.title }}</a>
+          <div class="product-desc">{{ c.description|truncatechars:70 }}</div>
+          <div class="spacer"></div>
+          <div class="card-actions"><a class="btn btn-outline-primary w-100" href="{% url 'courses' %}">التفاصيل</a></div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <div class="toolbar" id="products">
     <div>
-      <h2 class="m-0 fw-bold"><span class="section-tag"></span>{% if search %}نتائج البحث عن "{{ search }}"{% elif sort == 'best' %}الأكثر مبيعاً{% elif sort == 'popular' %}الأكثر طلباً{% elif sort == 'offers' %}العروض الخاصة{% else %}كل المنتجات{% endif %}</h2>
+      <h2 class="m-0 fw-bold"><span class="section-tag"></span>{% if search %}منتجات مطابقة{% elif sort == 'best' %}الأكثر مبيعاً{% elif sort == 'popular' %}الأكثر طلباً{% elif sort == 'offers' %}العروض الخاصة{% else %}كل المنتجات{% endif %}</h2>
     </div>
     <form method="get" class="d-flex gap-2 flex-wrap">
       {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}

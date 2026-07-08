@@ -272,9 +272,22 @@ def home(request):
         # الافتراضي: ترتيب ذكي (مميّزة + 80% شعبية + 20% عشوائي)
         products = _smart_ordered_products(products_qs, per)
 
+    # نتائج البحث تشمل الفيديوهات والدورات أيضاً (لا المنتجات فقط)
+    search_videos = []
+    search_courses = []
+    if search:
+        search_videos = list(EducationalVideo.objects.filter(is_active=True).filter(
+            Q(title__icontains=search) | Q(description__icontains=search) | Q(components__icontains=search)
+        ).order_by('-created_at')[:12])
+        search_courses = list(Course.objects.filter(is_active=True).filter(
+            Q(title__icontains=search) | Q(description__icontains=search) | Q(trainer__icontains=search)
+        ).order_by('-created_at')[:8])
+
     context = _base_context(request)
     context.update({
         'products': products,
+        'search_videos': search_videos,
+        'search_courses': search_courses,
         'per': per,
         'per_options': PER_OPTIONS,
         # بطاقات العرض في الرئيسية (صور مصغرة)
