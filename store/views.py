@@ -499,51 +499,19 @@ def manifest(request):
 
 
 def service_worker(request):
-    """Service Worker: تصفّح أسرع + عمل جزئي بلا إنترنت + تحديث تلقائي للمحتوى."""
+    """Service Worker مُعطَّل (kill-switch): يمسح الكاش ويُلغي نفسه لتنظيف الأجهزة القديمة."""
     js = r"""
-const CACHE = 'itc-cache-v1';
-self.addEventListener('install', function (e) { self.skipWaiting(); });
+self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (e) {
   e.waitUntil((async function () {
-    const keys = await caches.keys();
-    await Promise.all(keys.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
-    await self.clients.claim();
+    var keys = await caches.keys();
+    await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+    try { await self.registration.unregister(); } catch (err) {}
+    var cs = await self.clients.matchAll({ type: 'window' });
+    cs.forEach(function (c) { c.navigate(c.url); });
   })());
 });
-self.addEventListener('fetch', function (e) {
-  const req = e.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  if (url.origin !== location.origin) return;
-  // صفحات HTML: الشبكة أولاً ليظهر آخر تحديث دائماً عند توفّر الإنترنت
-  if (req.mode === 'navigate') {
-    e.respondWith((async function () {
-      try {
-        const fresh = await fetch(req);
-        const cache = await caches.open(CACHE);
-        cache.put(req, fresh.clone());
-        return fresh;
-      } catch (err) {
-        return (await caches.match(req)) || (await caches.match('/'));
-      }
-    })());
-    return;
-  }
-  // الأصول الثابتة والصور: الكاش أولاً لتسريع الزيارات المتكررة
-  if (/\.(css|js|png|jpg|jpeg|webp|svg|gif|ico|woff2?)$/i.test(url.pathname) ||
-      url.pathname.indexOf('/static/') === 0 || url.pathname.indexOf('/media/') === 0) {
-    e.respondWith((async function () {
-      const cached = await caches.match(req);
-      if (cached) return cached;
-      try {
-        const fresh = await fetch(req);
-        const cache = await caches.open(CACHE);
-        cache.put(req, fresh.clone());
-        return fresh;
-      } catch (err) { return cached; }
-    })());
-  }
-});
+// لا نعترض أي طلب — كل شيء عبر الشبكة العادية (لا كاش)
 """
     return HttpResponse(js, content_type='application/javascript')
 

@@ -240,15 +240,6 @@
     .wa-float svg { width: 30px; height: 30px; }
     @media (max-width: 900px) { .wa-float { bottom: 94px; right: 16px; width: 52px; height: 52px; } }
 
-    /* إشعار توفّر تحديث جديد (PWA) */
-    .sw-update {
-      position: fixed; z-index: 95; left: 50%; transform: translateX(-50%); bottom: 100px;
-      background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 999px;
-      display: flex; align-items: center; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.3);
-      font-size: 13px; font-weight: 700;
-    }
-    .sw-update button { background: var(--orange); color: #fff; border: 0; border-radius: 999px; padding: 5px 14px; font-weight: 900; cursor: pointer; }
-
     /* bottom floating nav — mobile only */
     .bottom-nav { display: none; }
     @media (max-width: 900px) {
@@ -748,11 +739,6 @@
   </a>
   {% endif %}
 
-  <div id="sw-update" class="sw-update" hidden>
-    <span>🔄 تحديث جديد للموقع متوفّر</span>
-    <button type="button" onclick="location.reload()">تحديث الآن</button>
-  </div>
-
   {% comment %} قائمة منسدلة (تفتح من زر الثلاث خطوط أو زر التصنيفات) {% endcomment %}
   <div class="drawer-overlay" data-drawer-close></div>
   <aside class="drawer" id="drawer">
@@ -917,22 +903,14 @@
       });
     })();
 
-    // تسجيل Service Worker (PWA) + إشعار عند توفّر تحديث جديد
+    // تنظيف: إزالة أي Service Worker قديم وتفريغ الكاش (كان يسبب مشاكل عرض قديمة)
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/sw.js').then(function (reg) {
-          reg.addEventListener('updatefound', function () {
-            var nw = reg.installing;
-            if (!nw) return;
-            nw.addEventListener('statechange', function () {
-              if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-                var b = document.getElementById('sw-update');
-                if (b) b.hidden = false;
-              }
-            });
-          });
-        }).catch(function () {});
-      });
+      navigator.serviceWorker.getRegistrations().then(function (rs) {
+        rs.forEach(function (r) { r.unregister(); });
+      }).catch(function () {});
+    }
+    if (window.caches && caches.keys) {
+      caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); }).catch(function () {});
     }
   </script>
   {% block extra_js %}{% endblock %}
