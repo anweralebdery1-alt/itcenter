@@ -1,0 +1,87 @@
+{% extends 'store/base.html' %}
+{% block title %}إشعارات الأدمن | {{ settings.site_name }}{% endblock %}
+{% block extra_css %}
+<style>
+  .push-wrap { max-width: 620px; margin: 26px auto; }
+  .push-card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 24px; text-align: center; }
+  .push-ico { font-size: 46px; }
+  .push-card h1 { font-size: 22px; font-weight: 900; margin: 10px 0; }
+  .push-card p { color: var(--muted); }
+  #enableBtn { background: linear-gradient(135deg, var(--orange), var(--orange-dark)); color: #fff; border: 0; border-radius: 999px; padding: 14px 34px; font-weight: 900; font-size: 16px; cursor: pointer; margin-top: 14px; }
+  #enableBtn:disabled { opacity: .6; }
+  .push-status { margin-top: 14px; font-weight: 700; }
+  .push-ok { color: #166534; }
+  .push-err { color: #b91c1c; }
+  .push-note { background: #fff7ed; border: 1px dashed #fdba74; color: #9a3412; border-radius: 12px; padding: 14px; margin-top: 18px; font-size: 13px; text-align: start; line-height: 1.9; }
+  .push-count { margin-top: 12px; color: var(--muted); font-size: 13px; }
+</style>
+{% endblock %}
+{% block content %}
+<main class="container-wide">
+  <div class="push-wrap">
+    <div class="push-card">
+      <div class="push-ico">🔔</div>
+      <h1>إشعارات الطلبات الجديدة</h1>
+      <p>فعّل الإشعارات على هذا الجهاز لتصلك رسالة فوريّة بكل طلب جديد حتى والتطبيق مغلق.</p>
+
+      {% if push_ready %}
+        <button type="button" id="enableBtn">تفعيل الإشعارات على هذا الجهاز</button>
+        <div class="push-status" id="status"></div>
+        <div class="push-count">الأجهزة المفعّلة حالياً: {{ subs_count }}</div>
+      {% else %}
+        <div class="push-status push-err">لم يتم إعداد مفاتيح VAPID على الخادم بعد. (شغّل <code>python manage.py vapid_keys</code> وضع الناتج في متغيّر البيئة.)</div>
+      {% endif %}
+
+      <div class="push-note">
+        <b>مهم للآيفون:</b> يجب أولاً <b>حفظ الموقع على الشاشة الرئيسية</b> من Safari (مشاركة ← إضافة إلى الشاشة الرئيسية)، ثم <b>فتح الموقع من الأيقونة</b> (لا من Safari)، وتسجيل الدخول للأدمن، ثم فتح هذه الصفحة والضغط «تفعيل». يتطلب iOS 16.4 أو أحدث.
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}
+{% block extra_js %}
+{% if push_ready %}
+<script>
+  var VAPID_PUBLIC = "{{ vapid_public_key }}";
+
+  function b64ToUint8(base64) {
+    var pad = '='.repeat((4 - base64.length % 4) % 4);
+    var b = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+    var raw = atob(b); var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function getCookie(n) { var v = document.cookie.match('(^|;)\\s*' + n + '\\s*=\\s*([^;]+)'); return v ? v.pop() : ''; }
+
+  var btn = document.getElementById('enableBtn');
+  var status = document.getElementById('status');
+  function setStatus(msg, ok) { status.textContent = msg; status.className = 'push-status ' + (ok ? 'push-ok' : 'push-err'); }
+
+  btn.addEventListener('click', async function () {
+    btn.disabled = true;
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        setStatus('هذا الجهاز/المتصفّح لا يدعم الإشعارات. على الآيفون: احفظ الموقع على الشاشة الرئيسية وافتحه من الأيقونة.', false);
+        btn.disabled = false; return;
+      }
+      var reg = await navigator.serviceWorker.register('/push-sw.js');
+      var perm = await Notification.requestPermission();
+      if (perm !== 'granted') { setStatus('لم تُمنح صلاحية الإشعارات.', false); btn.disabled = false; return; }
+      var sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: b64ToUint8(VAPID_PUBLIC)
+      });
+      var res = await fetch('/push/subscribe/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify(sub), credentials: 'same-origin'
+      });
+      if (res.ok) { setStatus('✅ تم تفعيل الإشعارات على هذا الجهاز.', true); }
+      else { setStatus('تعذّر حفظ الاشتراك (' + res.status + ').', false); btn.disabled = false; }
+    } catch (e) {
+      setStatus('خطأ: ' + e.message, false); btn.disabled = false;
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -295,6 +295,22 @@ class Review(models.Model):
         return f'{self.product} - {self.rating}★ - {self.name}'
 
 
+class PushSubscription(models.Model):
+    """اشتراك إشعارات ويب لجهاز الأدمن (المثبِّت للموقع كتطبيق)."""
+    endpoint = models.TextField(unique=True)
+    p256dh = models.CharField(max_length=255)
+    auth = models.CharField(max_length=255)
+    label = models.CharField(max_length=120, blank=True, verbose_name='الجهاز/الاسم')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'اشتراك إشعارات'
+        verbose_name_plural = 'اشتراكات الإشعارات'
+
+    def __str__(self):
+        return self.label or self.endpoint[:40]
+
+
 class Customer(models.Model):
     user = models.OneToOneField(User, null=True, blank=True, on_delete=models.SET_NULL)
     phone = models.CharField(max_length=50, unique=True)

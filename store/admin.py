@@ -13,6 +13,7 @@ from .models import (
     PhoneOTP,
     Product,
     ProductImage,
+    PushSubscription,
     Review,
     SaleReservation,
     Series,
@@ -217,6 +218,12 @@ class ProductAdmin(admin.ModelAdmin):
     def unmark_featured(self, request, queryset):
         updated = queryset.update(is_featured=False)
         self.message_user(request, f'تم إلغاء تمييز {updated} منتجاً.')
+
+
+@admin.register(PushSubscription)
+class PushSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ('label', 'created_at')
+    readonly_fields = ('endpoint', 'p256dh', 'auth', 'created_at')
 
 
 @admin.register(Review)

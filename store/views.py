@@ -131,6 +131,7 @@ from .models import (
     OrderItem,
     PhoneOTP,
     Product,
+    PushSubscription,
     Review,
     SiteSection,
     SiteSettings,
@@ -529,6 +530,101 @@ self.addEventListener('activate', function (e) {
     return HttpResponse(js, content_type='application/javascript')
 
 
+# ================= إشعارات الويب للأدمن (Web Push) =================
+
+def push_sw(request):
+    """Service Worker مخصّص للإشعارات فقط — بلا أي تخزين (كاش) حتى لا تعود مشاكل العرض."""
+    js = r"""
+self.addEventListener('push', function (e) {
+  var d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'مركز آي تي', {
+    body: d.body || '',
+    icon: d.icon || '/static/icon.png',
+    badge: d.badge || d.icon || '/static/icon.png',
+    dir: 'rtl', lang: 'ar',
+    data: { url: d.url || '/admin/' },
+    vibrate: [80, 40, 80]
+  }));
+});
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var url = (e.notification.data && e.notification.data.url) || '/admin/';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+    for (var i = 0; i < list.length; i++) { if ('focus' in list[i]) { list[i].navigate(url); return list[i].focus(); } }
+    return clients.openWindow(url);
+  }));
+});
+"""
+    return HttpResponse(js, content_type='application/javascript')
+
+
+def push_page(request):
+    """صفحة تفعيل الإشعارات — للأدمن (staff) فقط."""
+    from django.contrib.auth.views import redirect_to_login
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return redirect_to_login(request.get_full_path(), login_url='/admin/login/')
+    context = _base_context(request)
+    context.update({
+        'vapid_public_key': getattr(settings, 'VAPID_PUBLIC_KEY', ''),
+        'push_ready': bool(getattr(settings, 'VAPID_PUBLIC_KEY', '')),
+        'subs_count': PushSubscription.objects.count(),
+    })
+    return render(request, 'store/push.html', context)
+
+
+@require_POST
+def push_subscribe(request):
+    """يحفظ اشتراك الإشعارات (للأدمن فقط)."""
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return JsonResponse({'status': 'forbidden'}, status=403)
+    import json
+    try:
+        data = json.loads(request.body.decode())
+        keys = data.get('keys', {})
+        endpoint = data['endpoint']
+        p256dh = keys['p256dh']
+        auth = keys['auth']
+    except (ValueError, KeyError, TypeError):
+        return JsonResponse({'status': 'bad_request'}, status=400)
+    PushSubscription.objects.update_or_create(
+        endpoint=endpoint,
+        defaults={'p256dh': p256dh, 'auth': auth,
+                  'label': (request.user.get_username() or '')[:120]},
+    )
+    return JsonResponse({'status': 'ok'})
+
+
+def send_admin_push(title, body, url='/admin/'):
+    """يرسل إشعاراً لكل أجهزة الأدمن المشتركة. آمن: لا يرفع استثناءً للمتصل."""
+    private_pem = getattr(settings, 'VAPID_PRIVATE_PEM', '')
+    if not private_pem:
+        return
+    try:
+        from pywebpush import webpush, WebPushException
+    except Exception:
+        return
+    import json
+    claims = {'sub': getattr(settings, 'VAPID_SUBJECT', 'mailto:admin@example.com')}
+    payload = json.dumps({'title': title, 'body': body, 'url': url})
+    for sub in PushSubscription.objects.all():
+        try:
+            webpush(
+                subscription_info={'endpoint': sub.endpoint,
+                                   'keys': {'p256dh': sub.p256dh, 'auth': sub.auth}},
+                data=payload,
+                vapid_private_key=private_pem,
+                vapid_claims=dict(claims),
+            )
+        except Exception as e:
+            # اشتراك منتهٍ (404/410) → نحذفه
+            status = getattr(getattr(e, 'response', None), 'status_code', None)
+            if status in (404, 410):
+                sub.delete()
+            else:
+                print('web push error:', e)
+
+
 @ensure_csrf_cookie
 def account(request):
     context = _base_context(request)
@@ -807,6 +903,16 @@ def checkout_details(request):
         for key in ('otp_phone', 'otp_payment', 'otp_next', 'otp_verified', 'dev_otp_code', 'otp_sms_sent'):
             request.session.pop(key, None)
         request.session.modified = True
+
+        # إشعار الأدمن بطلب جديد
+        try:
+            send_admin_push(
+                title='🛒 طلب جديد',
+                body=f'{full_name} — {total:,.0f} د.ع ({len(items)} منتج)',
+                url=f'/admin/store/order/{order.id}/change/',
+            )
+        except Exception:
+            pass
 
         if payment_method == 'card':
             return redirect('payment_redirect', order_id=order.id)

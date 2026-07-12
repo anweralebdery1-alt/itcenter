@@ -159,3 +159,21 @@ X_FRAME_OPTIONS = "DENY"
 SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "3600" if not DEBUG else "0"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", not DEBUG)
 SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", not DEBUG)
+
+# ---- إشعارات الويب للأدمن (Web Push / VAPID) ----
+# ولّد المفتاح مرّة واحدة: python manage.py vapid_keys ثم ضع الناتج في متغيّر البيئة.
+VAPID_PRIVATE_KEY_B64 = os.environ.get("VAPID_PRIVATE_KEY", "")  # base64 لملف PEM
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@itcenterstore.com")
+VAPID_PRIVATE_PEM = ""
+VAPID_PUBLIC_KEY = ""
+if VAPID_PRIVATE_KEY_B64:
+    try:
+        import base64 as _b64
+        from cryptography.hazmat.primitives import serialization as _ser
+        VAPID_PRIVATE_PEM = _b64.b64decode(VAPID_PRIVATE_KEY_B64).decode()
+        _priv = _ser.load_pem_private_key(VAPID_PRIVATE_PEM.encode(), password=None)
+        _pub = _priv.public_key().public_bytes(_ser.Encoding.X962, _ser.PublicFormat.UncompressedPoint)
+        VAPID_PUBLIC_KEY = _b64.urlsafe_b64encode(_pub).rstrip(b"=").decode()
+    except Exception:
+        VAPID_PRIVATE_PEM = ""
+        VAPID_PUBLIC_KEY = ""

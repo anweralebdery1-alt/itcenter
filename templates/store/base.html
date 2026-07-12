@@ -903,10 +903,13 @@
       });
     })();
 
-    // تنظيف: إزالة أي Service Worker قديم وتفريغ الكاش (كان يسبب مشاكل عرض قديمة)
+    // تنظيف: إزالة Service Worker الكاش القديم فقط (نُبقي عامل الإشعارات push-sw.js)
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function (rs) {
-        rs.forEach(function (r) { r.unregister(); });
+        rs.forEach(function (r) {
+          var u = (r.active && r.active.scriptURL) || (r.installing && r.installing.scriptURL) || (r.waiting && r.waiting.scriptURL) || '';
+          if (u.indexOf('/push-sw.js') === -1) r.unregister();
+        });
       }).catch(function () {});
     }
     if (window.caches && caches.keys) {
