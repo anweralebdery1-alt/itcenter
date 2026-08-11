@@ -529,6 +529,62 @@ class PosDevice(models.Model):
         return self.name or self.device_id
 
 
+class AppRelease(models.Model):
+    """إصدار من برنامج نقطة البيع. ترفع ملف MSI هنا، فتكتشفه الحاسبات
+    تلقائياً عند التشغيل وتعرض على المستخدم زر تحديث."""
+    version = models.CharField(max_length=20, unique=True, verbose_name='رقم الإصدار',
+                               help_text='مثل 1.3.2 — أرقام يفصلها نقاط')
+    installer = models.FileField(upload_to='releases/', verbose_name='ملف التنصيب (MSI)')
+    notes = models.TextField(blank=True, verbose_name='ما الجديد',
+                             help_text='يظهر للمستخدم في نافذة التحديث. سطر لكل تغيير.')
+    is_active = models.BooleanField(default=True, verbose_name='منشور',
+                                    help_text='أزل العلامة لإيقاف توزيع هذا الإصدار فوراً.')
+    is_mandatory = models.BooleanField(default=False, verbose_name='تحديث إلزامي',
+                                       help_text='يُطلب التحديث بإلحاح ولا يُسمح بتأجيله.')
+    sha256 = models.CharField(max_length=64, blank=True, editable=False,
+                              verbose_name='بصمة الملف')
+    size_bytes = models.BigIntegerField(default=0, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+        verbose_name = 'إصدار البرنامج'
+        verbose_name_plural = 'إصدارات البرنامج'
+
+    def __str__(self):
+        return f'v{self.version}'
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # نحسب البصمة بعد الحفظ ليكون الملف على القرص — بها تتأكد الحاسبة
+        # أن ما نزّلته سليم وغير مبتور قبل تشغيله.
+        if self.installer and not self.sha256:
+            import hashlib
+            digest = hashlib.sha256()
+            size = 0
+            self.installer.open('rb')
+            try:
+                for block in iter(lambda: self.installer.read(1024 * 1024), b''):
+                    digest.update(block)
+                    size += len(block)
+            finally:
+                self.installer.close()
+            AppRelease.objects.filter(pk=self.pk).update(
+                sha256=digest.hexdigest(), size_bytes=size)
+            self.sha256 = digest.hexdigest()
+            self.size_bytes = size
+
+    @property
+    def version_tuple(self):
+        parts = []
+        for chunk in str(self.version or '').split('.'):
+            digits = ''.join(ch for ch in chunk if ch.isdigit())
+            parts.append(int(digits) if digits else 0)
+        while len(parts) < 3:
+            parts.append(0)
+        return tuple(parts[:3])
+
+
 class PosEvent(models.Model):
     """سجل المزامنة المركزي: كل تغيير حصل على أي حاسبة يُخزَّن هنا مرة واحدة،
     وتسحبه الحاسبة الأخرى بالترتيب. هذا السجل هو مصدر الحقيقة الكامل للنظام."""

@@ -23,7 +23,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import PosDevice, PosEvent, Product, StockMove
+from .models import AppRelease, PosDevice, PosEvent, Product, StockMove
 
 
 logger = logging.getLogger(__name__)
@@ -281,6 +281,31 @@ def pos_pull(request):
         ],
         'next_since': next_since,
         'has_more': has_more,
+    })
+
+
+@require_GET
+def pos_version(request):
+    """أحدث إصدار منشور من البرنامج. تسأل عنه كل حاسبة عند التشغيل."""
+    device, error = _authenticate(request)
+    if error:
+        return error
+
+    releases = [r for r in AppRelease.objects.filter(is_active=True).exclude(installer='')]
+    if not releases:
+        return JsonResponse({'status': 'ok', 'latest': None})
+
+    latest = max(releases, key=lambda release: release.version_tuple)
+    return JsonResponse({
+        'status': 'ok',
+        'latest': {
+            'version': latest.version,
+            'url': request.build_absolute_uri(latest.installer.url),
+            'sha256': latest.sha256,
+            'size_bytes': latest.size_bytes,
+            'notes': latest.notes,
+            'mandatory': latest.is_mandatory,
+        },
     })
 
 

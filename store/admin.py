@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.utils.html import format_html
 from .models import (
+    AppRelease,
     Category,
     Course,
     Customer,
@@ -314,6 +315,19 @@ class TeamMemberAdmin(admin.ModelAdmin):
     list_display = ('name', 'role', 'phone', 'order', 'is_active')
     list_editable = ('order', 'is_active')
     search_fields = ('name', 'role', 'bio', 'phone')
+
+
+@admin.register(AppRelease)
+class AppReleaseAdmin(admin.ModelAdmin):
+    list_display = ('version', 'is_active', 'is_mandatory', 'size_mb', 'created_at')
+    list_editable = ('is_active', 'is_mandatory')
+    readonly_fields = ('sha256', 'size_bytes', 'created_at')
+    fields = ('version', 'installer', 'notes', 'is_active', 'is_mandatory',
+              'sha256', 'size_bytes', 'created_at')
+
+    @admin.display(description='الحجم')
+    def size_mb(self, obj):
+        return f'{(obj.size_bytes or 0) / 1048576:.1f} MB'
 
 
 @admin.register(PosDevice)
