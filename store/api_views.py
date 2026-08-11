@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from .models import Order, Product, SaleReservation
 from .serializers import ProductSerializer
 from django.core.paginator import Paginator
@@ -96,7 +97,7 @@ def _upsert_product(data):
 @require_GET
 def products_list(request):
     q = request.GET.get('search','').strip()
-    qs = Product.objects.all().order_by('-created_at')
+    qs = Product.objects.visible().order_by('-created_at')
     if q:
         qs = qs.filter(name__icontains=q)
     tab = request.GET.get('tab','all')
@@ -160,12 +161,10 @@ def sync_push(request):
                 else:
                     applied.append(result)
             elif table in PRODUCT_TABLE_NAMES and op == 'delete':
-                sku = str(data.get('sku') or data.get('local_id') or data.get('id') or data.get('pk') or '').strip()
-                if not sku:
-                    errors.append({'change': ch, 'error':'missing sku/local_id'})
-                    continue
-                deleted, _ = Product.objects.filter(sku=sku).delete()
-                applied.append({'action':'delete','sku':sku,'deleted':deleted})
+                # الحذف بالـSKU ممنوع: الـSKU يجوز تكراره وحذف واحد كان يمسح مشابهيه.
+                # المزامنة الحديثة تحذف بالـuuid عبر /api/pos/push/.
+                errors.append({'change': ch,
+                               'error': 'delete by sku is disabled — use /api/pos/push/ with a product uuid'})
             elif table == 'sales' and op=='insert':
                 try:
                     items = data.get('items', [])
@@ -188,7 +187,7 @@ def sync_pull(request):
         return _invalid_token_response()
     since = request.GET.get('since')
     try:
-        qs = Product.objects.all().order_by('-updated_at')[:100]
+        qs = Product.objects.visible().order_by('-updated_at')[:100]
         data = ProductSerializer(qs, many=True).data
         return JsonResponse({'status':'ok','changes': data})
     except Exception as e:
@@ -211,7 +210,7 @@ def stock_snapshot(request):
             'qty': p.quantity,
             'updated_at': p.updated_at.isoformat(),
         }
-        for p in Product.objects.all().order_by('local_id', 'sku')
+        for p in Product.objects.visible().order_by('local_id', 'sku')
     ]
     return JsonResponse(data, safe=False)
 
@@ -239,21 +238,21 @@ def stock_update(request):
         for item in items:
             # حذف فعلي من الموقع عند وصول علامة الحذف (المطابقة عبر local_id أولاً)
             if isinstance(item, dict) and (item.get('_delete') or item.get('deleted')):
+                # حذف منطقي بالمعرّف المحلي فقط. المسح الفيزيائي أُلغي لأن المنتج
+                # كان يعود عند أول مزامنة من الحاسبة الأخرى، والحذف بالـSKU
+                # كان يمسح كل من يشاركه نفس الرقم.
                 raw_local = item.get('local_id') or item.get('id') or item.get('pk')
                 try:
                     lid = int(str(raw_local).strip()) if str(raw_local).strip() != '' and raw_local is not None else None
                 except (TypeError, ValueError):
                     lid = None
-                if lid is not None:
-                    deleted, _ = Product.objects.filter(local_id=lid).delete()
-                    applied.append({'action': 'delete', 'local_id': lid, 'deleted': deleted})
+                if lid is None:
+                    errors.append({'item': item,
+                                   'error': 'delete needs local_id — use /api/pos/push/ for uuid deletes'})
                     continue
-                sku = str(item.get('sku') or '').strip()
-                if not sku:
-                    errors.append({'item': item, 'error': 'missing local_id/sku for delete'})
-                    continue
-                deleted, _ = Product.objects.filter(sku=sku).delete()
-                applied.append({'action': 'delete', 'sku': sku, 'deleted': deleted})
+                deleted = Product.objects.filter(local_id=lid, deleted_at__isnull=True).update(
+                    deleted_at=timezone.now())
+                applied.append({'action': 'delete', 'local_id': lid, 'deleted': deleted})
                 continue
             result, err = _upsert_product(item)
             if err:

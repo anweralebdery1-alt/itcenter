@@ -11,9 +11,12 @@ from .models import (
     Order,
     OrderItem,
     PhoneOTP,
+    PosDevice,
+    PosEvent,
     Product,
     ProductImage,
     PushSubscription,
+    StockMove,
     Review,
     SaleReservation,
     Series,
@@ -311,6 +314,39 @@ class TeamMemberAdmin(admin.ModelAdmin):
     list_display = ('name', 'role', 'phone', 'order', 'is_active')
     list_editable = ('order', 'is_active')
     search_fields = ('name', 'role', 'bio', 'phone')
+
+
+@admin.register(PosDevice)
+class PosDeviceAdmin(admin.ModelAdmin):
+    list_display = ('name', 'device_id', 'is_active', 'last_seen', 'created_at')
+    list_editable = ('is_active',)
+    readonly_fields = ('token', 'last_seen', 'created_at')
+    search_fields = ('name', 'device_id')
+
+
+@admin.register(StockMove)
+class StockMoveAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'product_uuid', 'delta', 'reason', 'device_id', 'note')
+    list_filter = ('reason', 'device_id')
+    search_fields = ('product_uuid', 'ref_uuid', 'note')
+    readonly_fields = tuple(field.name for field in StockMove._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(PosEvent)
+class PosEventAdmin(admin.ModelAdmin):
+    list_display = ('seq', 'entity', 'op', 'entity_uuid', 'device_id', 'created_at', 'received_at')
+    list_filter = ('entity', 'op', 'device_id')
+    search_fields = ('uuid', 'entity_uuid')
+    readonly_fields = tuple(field.name for field in PosEvent._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(SaleReservation)

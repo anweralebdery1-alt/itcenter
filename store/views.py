@@ -1,3 +1,4 @@
+import logging
 import random
 import re
 import secrets
@@ -139,6 +140,8 @@ from .models import (
 )
 
 
+logger = logging.getLogger(__name__)
+
 PROVINCES = [
     'بغداد', 'البصرة', 'نينوى', 'أربيل', 'السليمانية', 'دهوك', 'كركوك',
     'الأنبار', 'ديالى', 'صلاح الدين', 'واسط', 'بابل', 'كربلاء', 'النجف',
@@ -160,7 +163,7 @@ def _cart_count(request):
         return 0
     # نتجاهل (وننظّف) أي عنصر لمنتج لم يعد موجوداً حتى لا يعلق العدّاد
     try:
-        valid_ids = set(Product.objects.filter(id__in=[int(pid) for pid in cart]).values_list('id', flat=True))
+        valid_ids = set(Product.objects.visible().filter(id__in=[int(pid) for pid in cart]).values_list('id', flat=True))
     except (TypeError, ValueError):
         valid_ids = set()
     removed = False
@@ -186,7 +189,7 @@ def _cart_items(request):
             product_ids.append(int(pid))
         except (TypeError, ValueError):
             continue
-    products = Product.objects.filter(id__in=product_ids)
+    products = Product.objects.visible().filter(id__in=product_ids)
     products_by_id = {str(p.id): p for p in products}
     items = []
     total = 0
@@ -244,7 +247,7 @@ def home(request):
     search = request.GET.get('search', '').strip()
     category_id = request.GET.get('category', '').strip()
     sort = request.GET.get('sort', 'featured')
-    products_qs = Product.objects.select_related('category', 'series').all()
+    products_qs = Product.objects.visible().select_related('category', 'series')
 
     if search:
         products_qs = products_qs.filter(Q(name__icontains=search) | Q(sku__icontains=search) | Q(description__icontains=search))
@@ -292,10 +295,10 @@ def home(request):
         'per': per,
         'per_options': PER_OPTIONS,
         # بطاقات العرض في الرئيسية (صور مصغرة)
-        'best': list(Product.objects.annotate(sold=Sum('orderitem__quantity')).order_by('-sold', '-created_at')[:4]),
-        'popular': list(Product.objects.annotate(order_count=Count('orderitem')).order_by('-order_count', '-created_at')[:4]),
-        'offers': list(Product.objects.filter(is_offer=True).order_by('-updated_at')[:4]),
-        'newest': list(Product.objects.order_by('-created_at')[:4]),
+        'best': list(Product.objects.visible().annotate(sold=Sum('orderitem__quantity')).order_by('-sold', '-created_at')[:4]),
+        'popular': list(Product.objects.visible().annotate(order_count=Count('orderitem')).order_by('-order_count', '-created_at')[:4]),
+        'offers': list(Product.objects.visible().filter(is_offer=True).order_by('-updated_at')[:4]),
+        'newest': list(Product.objects.visible().order_by('-created_at')[:4]),
         # الدورات والفيديوهات لعرضها في الرئيسية (بطاقات عرض + الدورات كمنتجات)
         'home_courses': list(Course.objects.filter(is_active=True).order_by('-created_at')[:8]),
         'home_videos': list(EducationalVideo.objects.filter(is_active=True).order_by('project_number')[:4]),
@@ -309,17 +312,17 @@ def home(request):
 
 def product_detail(request, pk):
     product = get_object_or_404(
-        Product.objects.prefetch_related('gallery_images'),
+        Product.objects.visible().prefetch_related('gallery_images'),
         pk=pk,
     )
     _remember_product(request, product.id)
     Product.objects.filter(pk=product.pk).update(views_count=F('views_count') + 1)
     if product.series:
-        similar = Product.objects.filter(series=product.series).exclude(pk=product.pk)[:6]
+        similar = Product.objects.visible().filter(series=product.series).exclude(pk=product.pk)[:6]
     elif product.category:
-        similar = Product.objects.filter(category=product.category).exclude(pk=product.pk)[:6]
+        similar = Product.objects.visible().filter(category=product.category).exclude(pk=product.pk)[:6]
     else:
-        similar = Product.objects.exclude(pk=product.pk).order_by('-created_at')[:6]
+        similar = Product.objects.visible().exclude(pk=product.pk).order_by('-created_at')[:6]
     reviews = product.reviews.filter(is_approved=True)
     stats = reviews.aggregate(avg=Avg('rating'), count=Count('id'))
     phone = request.session.get('customer_phone')
@@ -394,7 +397,7 @@ def _visited_products(request, exclude_id=None):
     ids = request.session.get('visited_products', [])
     if exclude_id:
         ids = [pid for pid in ids if int(pid) != int(exclude_id)]
-    products = Product.objects.filter(id__in=ids)
+    products = Product.objects.visible().filter(id__in=ids)
     by_id = {p.id: p for p in products}
     return [by_id[pid] for pid in ids if pid in by_id][:8]
 
@@ -442,7 +445,7 @@ def _match_tokens(text):
 def _linked_components(components_list):
     """يربط كل مكوّن بأقرب منتج مطابق في المتجر (بأكثر الكلمات المشتركة) إن وُجد."""
     from django.urls import reverse
-    products = [(p['id'], _match_tokens(p['name'])) for p in Product.objects.values('id', 'name')]
+    products = [(p['id'], _match_tokens(p['name'])) for p in Product.objects.visible().values('id', 'name')]
     result = []
     for line in components_list:
         line_tokens = _match_tokens(line)
@@ -896,6 +899,14 @@ def checkout_details(request):
                 quantity=item['qty'],
                 line_total=item['line_total'],
             )
+
+        # كل طلب أونلاين يصبح حركة مخزون تصل للحاسبتين عند أول مزامنة،
+        # فلا تُباع في المحل قطعة اشتراها زبون من الموقع.
+        try:
+            from .pos_sync import record_online_order_moves
+            record_online_order_moves(order)
+        except Exception:
+            logger.exception('failed to record stock moves for order %s', order.id)
 
         request.session['cart'] = {}
         request.session['last_order_id'] = order.id

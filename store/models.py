@@ -140,11 +140,24 @@ class SiteSettings(ImageCompressMixin, models.Model):
         return d if d.startswith('964') else '964' + d
 
 
+class ProductQuerySet(models.QuerySet):
+    def visible(self):
+        """المنتجات التي يراها الزبون — تستثني ما حُذف من نقطة البيع."""
+        return self.filter(deleted_at__isnull=True)
+
+
 class Product(ImageCompressMixin, models.Model):
     image_fields = ('image',)
+    objects = ProductQuerySet.as_manager()
+    # مفتاح المزامنة الموحّد بين الموقع والحاسبتين — يسمح بتكرار الـSKU
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    # معرف المنتج في برنامج الأوفلاين = مفتاح المزامنة الفريد (يسمح بتكرار الـSKU)
+    # معرف المنتج في برنامج الأوفلاين (المزامنة القديمة) — يبقى للتوافق فقط
     local_id = models.IntegerField(null=True, blank=True, unique=True, db_index=True)
+    # حذف منطقي: المنتج المحذوف من نقطة البيع يختفي من المتجر ولا يُمسح صفّه،
+    # وإلا عاد من جديد عند أول مزامنة من الحاسبة الأخرى.
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='تاريخ الحذف')
+    # طابع آخر تعديل كما أرسلته نقطة البيع — يُستخدم لحسم التعارض (الأحدث يفوز)
+    pos_updated_at = models.CharField(max_length=40, blank=True, editable=False)
     sku = models.CharField(max_length=100, blank=True)
     name = models.CharField(max_length=300)
     description = models.TextField(blank=True)
@@ -498,6 +511,79 @@ class TeamMember(ImageCompressMixin, models.Model):
 
     def __str__(self):
         return self.name
+
+class PosDevice(models.Model):
+    """حاسبة نقطة بيع مصرّح لها بالمزامنة. لكل جهاز رمزه الخاص ليمكن إيقافه وحده."""
+    device_id = models.CharField(max_length=64, unique=True, verbose_name='معرّف الجهاز')
+    name = models.CharField(max_length=100, verbose_name='الاسم', help_text='مثل: حاسبة أنور')
+    token = models.CharField(max_length=64, unique=True, verbose_name='رمز الاتصال')
+    is_active = models.BooleanField(default=True, verbose_name='مفعّل')
+    last_seen = models.DateTimeField(null=True, blank=True, verbose_name='آخر اتصال')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'جهاز نقطة بيع'
+        verbose_name_plural = 'أجهزة نقاط البيع'
+
+    def __str__(self):
+        return self.name or self.device_id
+
+
+class PosEvent(models.Model):
+    """سجل المزامنة المركزي: كل تغيير حصل على أي حاسبة يُخزَّن هنا مرة واحدة،
+    وتسحبه الحاسبة الأخرى بالترتيب. هذا السجل هو مصدر الحقيقة الكامل للنظام."""
+    seq = models.AutoField(primary_key=True)
+    uuid = models.CharField(max_length=64, unique=True)
+    entity = models.CharField(max_length=30, db_index=True)
+    entity_uuid = models.CharField(max_length=64, db_index=True)
+    op = models.CharField(max_length=10)
+    payload = models.JSONField(default=dict)
+    device_id = models.CharField(max_length=64, db_index=True)
+    created_at = models.CharField(max_length=40)
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('seq',)
+        verbose_name = 'حدث مزامنة'
+        verbose_name_plural = 'أحداث المزامنة'
+
+    def __str__(self):
+        return f'{self.seq} · {self.entity}.{self.op}'
+
+
+class StockMove(models.Model):
+    """حركة مخزون واحدة. الكمية المعروضة = مجموع الحركات، لا رقماً يُكتب فوقه.
+    هكذا لا تضيع بيعة عند بيع حاسبتين بلا إنترنت في وقت واحد."""
+    REASONS = [
+        ('opening', 'رصيد افتتاحي'),
+        ('sale', 'بيع في المحل'),
+        ('sale_void', 'إلغاء وصل'),
+        ('return', 'إرجاع من زبون'),
+        ('adjust', 'تسوية يدوية'),
+        ('online_order', 'طلب من الموقع'),
+        ('online_order_cancel', 'إلغاء طلب من الموقع'),
+    ]
+    uuid = models.CharField(max_length=64, unique=True)
+    product = models.ForeignKey(Product, null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name='stock_moves')
+    product_uuid = models.CharField(max_length=64, db_index=True)
+    delta = models.IntegerField(verbose_name='التغيير')
+    reason = models.CharField(max_length=30, choices=REASONS, default='adjust')
+    ref_type = models.CharField(max_length=20, blank=True)
+    ref_uuid = models.CharField(max_length=64, blank=True, db_index=True)
+    note = models.CharField(max_length=250, blank=True)
+    device_id = models.CharField(max_length=64, blank=True)
+    created_at = models.CharField(max_length=40)
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-received_at',)
+        verbose_name = 'حركة مخزون'
+        verbose_name_plural = 'حركات المخزون'
+
+    def __str__(self):
+        return f'{self.product_uuid} {self.delta:+d} ({self.reason})'
+
 
 class SaleReservation(models.Model):
     STATUS_CHOICES = [('reserved','reserved'),('processed','processed')]
