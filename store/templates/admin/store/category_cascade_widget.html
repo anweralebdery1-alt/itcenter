@@ -1,0 +1,231 @@
+{% load static %}
+<div class="cc-wrap" id="cc-wrap"
+     data-selected="{{ selected_path }}"
+     data-tree='{{ tree_json }}'
+     data-add-url="{{ add_url }}">
+  <style>
+    .cc-wrap { --cc-blue:#1565C0; --cc-line:#d7e1ec; --cc-muted:#64748b; direction: rtl; }
+    .cc-level { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .cc-level label {
+      min-width: 92px; font-size: 12px; font-weight: 700; color: var(--cc-muted);
+    }
+    .cc-level select {
+      flex: 1; max-width: 340px; padding: 7px 10px; border: 1px solid var(--cc-line);
+      border-radius: 8px; background: #fff; color: #1a2733; font-size: 13px;
+    }
+    .cc-level select:focus { outline: 0; border-color: var(--cc-blue); }
+    .cc-add {
+      border: 1px dashed var(--cc-blue); background: #eef5fd; color: var(--cc-blue);
+      border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700;
+      cursor: pointer; white-space: nowrap;
+    }
+    .cc-add:hover { background: #e0edfb; }
+    .cc-add:disabled { opacity: .5; cursor: not-allowed; }
+    .cc-leaf {
+      flex: 1; max-width: 340px; font-size: 12px; color: var(--cc-muted);
+      background: #f4f7fb; border: 1px dashed var(--cc-line); border-radius: 8px;
+      padding: 7px 10px;
+    }
+    .cc-current {
+      margin-top: 8px; font-size: 12px; color: var(--cc-muted);
+      background: #f4f7fb; border-radius: 8px; padding: 6px 10px; display: inline-block;
+    }
+    .cc-current b { color: var(--cc-blue); }
+    .cc-msg { font-size: 12px; margin-top: 6px; }
+    .cc-msg.err { color: #C62828; }
+    .cc-msg.ok { color: #2E7D32; }
+  </style>
+
+  <input type="hidden" name="{{ field_name }}" id="cc-value" value="{{ value|default_if_none:'' }}">
+  <div id="cc-levels"></div>
+  <div class="cc-current" id="cc-current"></div>
+  <div class="cc-msg" id="cc-msg"></div>
+</div>
+
+<script>
+(function () {
+  var wrap = document.getElementById('cc-wrap');
+  if (!wrap || wrap.dataset.ready) { return; }
+  wrap.dataset.ready = '1';
+
+  var TREE = JSON.parse(wrap.dataset.tree || '{}');   // {id: {name, parent, children:[ids]}}
+  var ROOTS = TREE.__roots__ || [];
+  var ADD_URL = wrap.dataset.addUrl;
+  var hidden = document.getElementById('cc-value');
+  var levels = document.getElementById('cc-levels');
+  var current = document.getElementById('cc-current');
+  var msg = document.getElementById('cc-msg');
+
+  function node(id) { return TREE[String(id)]; }
+
+  function pathOf(id) {
+    // سلسلة الآباء من الجذر إلى العنصر
+    var chain = [];
+    var cursor = id;
+    while (cursor && node(cursor)) {
+      chain.unshift(String(cursor));
+      cursor = node(cursor).parent;
+    }
+    return chain;
+  }
+
+  function say(text, kind) {
+    msg.textContent = text || '';
+    msg.className = 'cc-msg ' + (kind || '');
+    if (text) { setTimeout(function () { msg.textContent = ''; }, 4000); }
+  }
+
+  function labelFor(depth) {
+    return depth === 0 ? 'التصنيف الرئيسي'
+         : depth === 1 ? 'التصنيف الفرعي'
+         : 'المستوى ' + (depth + 1);
+  }
+
+  function render() {
+    var chain = pathOf(hidden.value);
+    levels.innerHTML = '';
+
+    // نبني قائمة لكل مستوى: الجذور، ثم أبناء المختار، وهكذا
+    var options = ROOTS;
+    var depth = 0;
+
+    while (true) {
+      var chosen = chain[depth] || '';
+      levels.appendChild(buildLevel(depth, options, chosen));
+
+      if (!chosen) { break; }                 // لا اختيار → نتوقف هنا
+      var kids = node(chosen) ? node(chosen).children : [];
+      if (!kids.length) {                     // آخر ابن → زر إضافة ابن له فقط
+        levels.appendChild(buildLeafAdd(depth + 1, chosen));
+        break;
+      }
+      options = kids;
+      depth += 1;
+    }
+
+    // العنوان الكامل للمسار المختار
+    if (chain.length) {
+      current.innerHTML = 'التصنيف المحدد: <b>' +
+        chain.map(function (id) { return node(id).name; }).join(' › ') + '</b>';
+      current.style.display = 'inline-block';
+    } else {
+      current.textContent = 'لم يُختر تصنيف بعد.';
+      current.style.display = 'inline-block';
+    }
+  }
+
+  function buildLevel(depth, optionIds, chosen) {
+    var row = document.createElement('div');
+    row.className = 'cc-level';
+
+    var label = document.createElement('label');
+    label.textContent = labelFor(depth) + ':';
+    row.appendChild(label);
+
+    var select = document.createElement('select');
+    var blank = new Option(depth === 0 ? '— اختر تصنيفاً —' : '— بلا تصنيف فرعي —', '');
+    select.appendChild(blank);
+    optionIds.forEach(function (id) {
+      var item = node(id);
+      if (!item) { return; }
+      var suffix = item.children.length ? '  ▸' : '';
+      var option = new Option(item.name + suffix, id);
+      if (String(id) === String(chosen)) { option.selected = true; }
+      select.appendChild(option);
+    });
+
+    select.addEventListener('change', function () {
+      // اختيار مستوى يلغي كل ما تحته
+      hidden.value = select.value || (depth === 0 ? '' : parentOfLevel(depth));
+      render();
+    });
+    row.appendChild(select);
+
+    // زر إضافة تصنيف داخل هذا المستوى
+    var add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'cc-add';
+    add.textContent = depth === 0 ? '＋ تصنيف رئيسي' : '＋ تصنيف هنا';
+    add.title = depth === 0 ? 'إضافة تصنيف رئيسي جديد'
+                            : 'إضافة تصنيف تحت «' + (node(chain(depth - 1)) || {}).name + '»';
+    add.addEventListener('click', function () { createUnder(depth, add); });
+    row.appendChild(add);
+
+    return row;
+  }
+
+  function buildLeafAdd(depth, parentId) {
+    // لا يوجد ما يُختار تحت هذا المستوى، فنكتفي بزر إضافة ابن جديد له
+    var row = document.createElement('div');
+    row.className = 'cc-level';
+
+    var label = document.createElement('label');
+    label.textContent = labelFor(depth) + ':';
+    row.appendChild(label);
+
+    var hint = document.createElement('span');
+    hint.className = 'cc-leaf';
+    hint.textContent = 'لا تصنيفات تحت «' + node(parentId).name + '»';
+    row.appendChild(hint);
+
+    var add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'cc-add';
+    add.textContent = '＋ تصنيف هنا';
+    add.title = 'إضافة تصنيف تحت «' + node(parentId).name + '»';
+    add.addEventListener('click', function () { createUnder(depth, add); });
+    row.appendChild(add);
+
+    return row;
+  }
+
+  function chain(depth) {
+    var list = pathOf(hidden.value);
+    return depth < 0 ? null : list[depth];
+  }
+
+  function parentOfLevel(depth) {
+    // عند إفراغ قائمة فرعية نعود لأب هذا المستوى
+    return chain(depth - 1) || '';
+  }
+
+  function createUnder(depth, button) {
+    var parentId = depth === 0 ? null : chain(depth - 1);
+    var parentName = parentId ? node(parentId).name : 'المستوى الرئيسي';
+    var name = window.prompt('اسم التصنيف الجديد تحت «' + parentName + '»:');
+    if (!name || !name.trim()) { return; }
+
+    button.disabled = true;
+    var body = new FormData();
+    body.append('name', name.trim());
+    if (parentId) { body.append('parent', parentId); }
+    body.append('csrfmiddlewaretoken', getCsrf());
+
+    fetch(ADD_URL, { method: 'POST', body: body, credentials: 'same-origin' })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        button.disabled = false;
+        if (!data.ok) { say(data.error || 'تعذّرت الإضافة.', 'err'); return; }
+        TREE[String(data.id)] = { name: data.name, parent: data.parent, children: [] };
+        if (data.parent) { node(data.parent).children.push(String(data.id)); }
+        else { ROOTS.push(String(data.id)); }
+        hidden.value = data.id;              // نختاره فوراً
+        render();
+        say('أُضيف «' + data.name + '» واختير.', 'ok');
+      })
+      .catch(function (error) {
+        button.disabled = false;
+        say('تعذّر الاتصال: ' + error, 'err');
+      });
+  }
+
+  function getCsrf() {
+    var field = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (field) { return field.value; }
+    var match = document.cookie.match(/csrftoken=([^;]+)/);
+    return match ? match[1] : '';
+  }
+
+  render();
+})();
+</script>

@@ -1,7 +1,11 @@
+import json
+
 from django import forms
 from django.contrib import admin
 from django.core.exceptions import ValidationError
+from django.http import JsonResponse
 from django.template.loader import render_to_string
+from django.urls import path, reverse
 from django.utils.html import format_html
 from .models import (
     MAX_PRODUCT_IMAGES,
@@ -146,6 +150,55 @@ class ProductImagesWidget(forms.ClearableFileInput):
         })
 
 
+class CategoryCascadeWidget(forms.Widget):
+    """قوائم متتابعة للتصنيفات: الرئيسية أولاً، ثم أبناء ما اخترته، وهكذا.
+
+    القائمة الطويلة الواحدة التي تسرد ٦٥ تصنيفاً بصيغة «الأب › الابن» صعبة
+    التصفّح. هنا لا يرى المستخدم إلا ما يخصّ مستواه، ويستطيع إضافة تصنيف
+    جديد في أي مستوى بلا مغادرة الصفحة.
+    """
+
+    def get_context(self, name, value, attrs):
+        return {}
+
+    def value_from_datadict(self, data, files, name):
+        return data.get(name) or None
+
+    def render(self, name, value, attrs=None, renderer=None):
+        tree = {'__roots__': []}
+        for category in Category.objects.filter(is_active=True).order_by('order', 'name'):
+            tree[str(category.pk)] = {
+                'name': category.name,
+                'parent': str(category.parent_id) if category.parent_id else None,
+                'children': [],
+            }
+        for key, item in tree.items():
+            if key == '__roots__':
+                continue
+            if item['parent'] and item['parent'] in tree:
+                tree[item['parent']]['children'].append(key)
+            elif not item['parent']:
+                tree['__roots__'].append(key)
+
+        return render_to_string('admin/store/category_cascade_widget.html', {
+            'field_name': name,
+            'value': value or '',
+            'tree_json': json.dumps(tree, ensure_ascii=False),
+            'add_url': reverse('admin:store_category_quick_add'),
+            'selected_path': value or '',
+        })
+
+
+class CategoryCascadeField(forms.ModelChoiceField):
+    widget = CategoryCascadeWidget
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('queryset', Category.objects.all())
+        kwargs.setdefault('required', False)
+        kwargs.setdefault('label', 'التصنيف')
+        super().__init__(*args, **kwargs)
+
+
 class MultiImageField(forms.FileField):
     """حقل يقبل عدة ملفات دفعة واحدة.
 
@@ -185,6 +238,10 @@ class ProductAdminForm(forms.ModelForm):
         required=False,
         label='صور المنتج',
         help_text=f'حتى {MAX_PRODUCT_IMAGES} صور. الأولى هي الرئيسية.',
+    )
+
+    category = CategoryCascadeField(
+        help_text='اختر المستوى الرئيسي، فتظهر قائمة أبنائه، وهكذا حتى آخر مستوى.',
     )
 
     class Meta:
@@ -318,6 +375,42 @@ class ProductAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         form.apply_images(obj)
+
+    def get_urls(self):
+        return [
+            path('category-quick-add/', self.admin_site.admin_view(self.category_quick_add),
+                 name='store_category_quick_add'),
+        ] + super().get_urls()
+
+    def category_quick_add(self, request):
+        """يضيف تصنيفاً من داخل استمارة المنتج بلا مغادرة الصفحة."""
+        if request.method != 'POST':
+            return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+        if not request.user.has_perm('store.add_category'):
+            return JsonResponse({'ok': False, 'error': 'لا صلاحية لإضافة تصنيف.'},
+                                status=403)
+
+        name = (request.POST.get('name') or '').strip()
+        if not name:
+            return JsonResponse({'ok': False, 'error': 'اكتب اسم التصنيف.'})
+
+        parent = None
+        parent_id = (request.POST.get('parent') or '').strip()
+        if parent_id:
+            parent = Category.objects.filter(pk=parent_id).first()
+            if parent is None:
+                return JsonResponse({'ok': False, 'error': 'التصنيف الأب غير موجود.'})
+
+        if Category.objects.filter(name=name, parent=parent).exists():
+            return JsonResponse({'ok': False, 'error': f'«{name}» موجود هنا مسبقاً.'})
+
+        category = Category.objects.create(name=name, parent=parent)
+        return JsonResponse({
+            'ok': True,
+            'id': category.pk,
+            'name': category.name,
+            'parent': str(parent.pk) if parent else None,
+        })
     list_display = ('name', 'sku', 'sell_price', 'quantity', 'category',
                     'is_featured', 'featured_priority', 'is_offer', 'views_count', 'updated_at')
     list_editable = ('sell_price', 'quantity', 'is_featured', 'featured_priority', 'is_offer')

@@ -1,5 +1,7 @@
 import io
+import json
 import tempfile
+from html import unescape
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -498,3 +500,111 @@ class UnifiedImageUploaderTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIsNone(product)
         self.assertIn('ليس صورة', str(form.errors))
+
+
+class CategoryCascadeTests(TestCase):
+    """قوائم التصنيفات المتتابعة وإضافة تصنيف من داخل استمارة المنتج.
+
+    تمرّ عبر عنوان اللوحة الحقيقي لا بالنداء المباشر على الدالة، لأن
+    الصلاحيات و admin_view جزء من السلوك المطلوب فحصه.
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from .models import Category
+
+        self.url = '/admin/store/product/category-quick-add/'
+        self.boss = User.objects.create_superuser('boss', 'b@x.com', 'pw-12345678')
+        self.clerk = User.objects.create_user('clerk', 'c@x.com', 'pw-12345678',
+                                              is_staff=True)
+        self.root = Category.objects.create(name='إلكترونيات')
+        self.child = Category.objects.create(name='مقاومات', parent=self.root)
+
+    def test_widget_shows_only_roots_and_the_selected_chain(self):
+        from .admin import CategoryCascadeWidget
+
+        html = CategoryCascadeWidget().render('category', str(self.child.pk))
+        self.assertIn('cc-levels', html)
+        self.assertIn(str(self.child.pk), html)
+        # الشجرة كاملة تُمرَّر لجافاسكربت (مُهرَّبة داخل data-tree)
+        self.assertIn('__roots__', html)
+        tree = json.loads(unescape(
+            html.split("data-tree='")[1].split("'\n")[0]))
+        self.assertIn(str(self.root.pk), tree['__roots__'])
+        self.assertNotIn(str(self.child.pk), tree['__roots__'])
+        self.assertEqual(tree[str(self.root.pk)]['children'],
+                         [str(self.child.pk)])
+
+    def test_quick_add_creates_a_child_under_the_chosen_parent(self):
+        from .models import Category
+
+        self.client.force_login(self.boss)
+        response = self.client.post(self.url, {'name': 'مكثفات',
+                                               'parent': self.root.pk})
+        body = response.json()
+
+        self.assertTrue(body['ok'], body)
+        created = Category.objects.get(pk=body['id'])
+        self.assertEqual(created.parent, self.root)
+
+    def test_quick_add_can_go_one_level_deeper_than_a_leaf(self):
+        from .models import Category
+
+        self.client.force_login(self.boss)
+        body = self.client.post(self.url, {'name': 'كربونية',
+                                           'parent': self.child.pk}).json()
+
+        self.assertTrue(body['ok'], body)
+        self.assertEqual(Category.objects.get(pk=body['id']).parent, self.child)
+
+    def test_quick_add_creates_a_root_when_no_parent_is_sent(self):
+        from .models import Category
+
+        self.client.force_login(self.boss)
+        body = self.client.post(self.url, {'name': 'أدوات'}).json()
+
+        self.assertTrue(body['ok'], body)
+        self.assertIsNone(Category.objects.get(pk=body['id']).parent)
+
+    def test_duplicate_name_under_the_same_parent_is_refused(self):
+        self.client.force_login(self.boss)
+        body = self.client.post(self.url, {'name': 'مقاومات',
+                                           'parent': self.root.pk}).json()
+
+        self.assertFalse(body['ok'])
+        self.assertIn('مسبقاً', body['error'])
+
+    def test_staff_without_permission_cannot_add(self):
+        from .models import Category
+
+        self.client.force_login(self.clerk)
+        response = self.client.post(self.url, {'name': 'تهريب'})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Category.objects.filter(name='تهريب').exists())
+
+    def test_get_is_not_allowed(self):
+        self.client.force_login(self.boss)
+        self.assertEqual(self.client.get(self.url).status_code, 405)
+
+    def test_chosen_category_is_saved_on_the_product(self):
+        from django.contrib import admin as django_admin
+        from django.utils.datastructures import MultiValueDict
+
+        payload = MultiValueDict()
+        for key, value in {'name': 'منتج', 'sku': 'CC-1', 'description': '',
+                           'specifications_text': '', 'buy_price': 1000,
+                           'sell_price': 1500, 'quantity': 2, 'series': '',
+                           'featured_priority': 0,
+                           'category': str(self.child.pk)}.items():
+            payload.setlist(key, [value])
+
+        form = ProductAdminForm(payload, MultiValueDict())
+        self.assertTrue(form.is_valid(), form.errors)
+        product = form.save(commit=False)
+        django_admin.site._registry[Product].save_model(None, product, form,
+                                                        change=False)
+        form.save_m2m()
+        product.refresh_from_db()
+
+        self.assertEqual(product.category, self.child)
