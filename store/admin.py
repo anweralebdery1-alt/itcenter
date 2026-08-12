@@ -1,8 +1,10 @@
 from django import forms
 from django.contrib import admin
 from django.core.exceptions import ValidationError
+from django.template.loader import render_to_string
 from django.utils.html import format_html
 from .models import (
+    MAX_PRODUCT_IMAGES,
     AppRelease,
     Category,
     Course,
@@ -109,6 +111,59 @@ class SiteSectionAdmin(admin.ModelAdmin):
     search_fields = ('title', 'description')
 
 
+class ProductImagesWidget(forms.ClearableFileInput):
+    """منطقة واحدة لكل صور المنتج: لصق (Ctrl+V) أو سحب أو اختيار من الحاسبة.
+
+    استبدلت حقل «الصورة الرئيسية» أعلى الاستمارة وجدول «الصور الإضافية»
+    أسفلها — كانا مكانين منفصلين لشيء واحد.
+    """
+    allow_multiple_selected = True
+
+    def __init__(self, attrs=None):
+        super().__init__(attrs)
+        self.product = None
+
+    def value_from_datadict(self, data, files, name):
+        if hasattr(files, 'getlist'):
+            return files.getlist(name)
+        value = files.get(name)
+        return [value] if value else []
+
+    def render(self, name, value, attrs=None, renderer=None):
+        existing = []
+        product = self.product
+        if product is not None and product.pk:
+            if product.image:
+                existing.append({'token': 'main', 'url': product.image.url,
+                                 'is_main': True})
+            for extra in product.gallery_images.all():
+                existing.append({'token': f'g{extra.pk}', 'url': extra.image.url,
+                                 'is_main': False})
+        return render_to_string('admin/store/product_images_widget.html', {
+            'field_name': name,
+            'existing': existing,
+            'max_images': MAX_PRODUCT_IMAGES,
+        })
+
+
+class MultiImageField(forms.FileField):
+    """حقل يقبل عدة ملفات دفعة واحدة.
+
+    forms.FileField القياسي يتحقق من ملف واحد ويرفض القائمة، فنُمرّر كل ملف
+    على التحقق وحده ونُرجع قائمة نظيفة.
+    """
+
+    widget = ProductImagesWidget
+
+    def clean(self, data, initial=None):
+        if not data:
+            return []
+        if not isinstance(data, (list, tuple)):
+            data = [data]
+        return [super(MultiImageField, self).clean(item, initial)
+                for item in data if item]
+
+
 class ProductAdminForm(forms.ModelForm):
     specifications_text = forms.CharField(
         required=False,
@@ -126,12 +181,19 @@ class ProductAdminForm(forms.ModelForm):
         ),
     )
 
+    product_images = MultiImageField(
+        required=False,
+        label='صور المنتج',
+        help_text=f'حتى {MAX_PRODUCT_IMAGES} صور. الأولى هي الرئيسية.',
+    )
+
     class Meta:
         model = Product
-        exclude = ('specifications', 'views_count')
+        exclude = ('specifications', 'views_count', 'image')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['product_images'].widget.product = self.instance
         if self.instance and self.instance.pk:
             specifications = self.instance.specifications or {}
             if isinstance(specifications, dict):
@@ -169,27 +231,93 @@ class ProductAdminForm(forms.ModelForm):
             specifications[key] = value
         return specifications
 
+    def clean_product_images(self):
+        uploads = [f for f in (self.cleaned_data.get('product_images') or []) if f]
+        for upload in uploads:
+            content_type = getattr(upload, 'content_type', '') or ''
+            if not content_type.startswith('image/'):
+                raise ValidationError(f'«{upload.name}» ليس صورة.')
+        return uploads
+
+    def clean(self):
+        cleaned = super().clean()
+        uploads = cleaned.get('product_images') or []
+        removed = self._removed_tokens()
+
+        kept = 0
+        if self.instance and self.instance.pk:
+            if self.instance.image and 'main' not in removed:
+                kept += 1
+            kept += sum(1 for extra in self.instance.gallery_images.all()
+                        if f'g{extra.pk}' not in removed)
+
+        if kept + len(uploads) > MAX_PRODUCT_IMAGES:
+            raise ValidationError(
+                f'الحد الأقصى {MAX_PRODUCT_IMAGES} صور للمنتج — '
+                f'عندك {kept} وتحاول إضافة {len(uploads)}.')
+        return cleaned
+
+    def _removed_tokens(self):
+        if hasattr(self.data, 'getlist'):
+            return set(self.data.getlist('pi_remove'))
+        return set()
+
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.specifications = self.cleaned_data['specifications_text']
         if commit:
             instance.save()
             self.save_m2m()
+            self.apply_images(instance)
         return instance
 
+    def apply_images(self, product):
+        """يُستدعى بعد حفظ المنتج.
 
-class ProductImageInline(admin.TabularInline):
-    model = ProductImage
-    extra = 4
-    max_num = 4
-    fields = ('image', 'position', 'alt_text')
-    verbose_name = 'صورة إضافية'
-    verbose_name_plural = 'صور إضافية اختيارية (أربع كحد أقصى)'
+        لوحة إدارة Django تستدعي save(commit=False) ثم تحفظ الكائن بنفسها،
+        فلا يمكن وضع معالجة الصور داخل فرع commit=True — لن يُنفَّذ أبداً.
+        """
+        removed = self._removed_tokens()
+
+        if 'main' in removed and product.image:
+            product.image = None
+            product.thumbnail = None
+            product.save(update_fields=['image', 'thumbnail'])
+
+        for extra in list(product.gallery_images.all()):
+            if f'g{extra.pk}' in removed:
+                extra.delete()
+
+        self._store_uploads(product, self.cleaned_data.get('product_images') or [])
+
+    def _store_uploads(self, product, uploads):
+        """أول صورة تملأ الرئيسية إن كانت فارغة، والباقي في المعرض."""
+        if not uploads:
+            return
+        pending = list(uploads)
+
+        if not product.image:
+            product.image = pending.pop(0)
+            product.thumbnail = None
+            product.save()
+
+        used = set(product.gallery_images.values_list('position', flat=True))
+        for upload in pending:
+            position = next((slot for slot in range(1, MAX_PRODUCT_IMAGES)
+                             if slot not in used), None)
+            if position is None:
+                break
+            used.add(position)
+            ProductImage.objects.create(product=product, image=upload, position=position)
 
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        form.apply_images(obj)
     list_display = ('name', 'sku', 'sell_price', 'quantity', 'category',
                     'is_featured', 'featured_priority', 'is_offer', 'views_count', 'updated_at')
     list_editable = ('sell_price', 'quantity', 'is_featured', 'featured_priority', 'is_offer')
@@ -197,12 +325,15 @@ class ProductAdmin(admin.ModelAdmin):
     list_filter = ('is_featured', 'category', 'series', 'is_offer')
     ordering = ('-is_featured', 'featured_priority', '-updated_at')
     readonly_fields = ('uuid', 'views_count', 'created_at', 'updated_at')
-    inlines = (ProductImageInline,)
     actions = ('mark_featured', 'unmark_featured')
     fieldsets = (
+        ('صور المنتج', {
+            'fields': ('product_images',),
+            'description': 'الصق صورة منسوخة، أو اسحبها، أو اخترها من الحاسبة. '
+                           'تُضاف مباشرة ويبقى المكان جاهزاً للصورة التالية.',
+        }),
         ('بيانات المنتج', {
-            'fields': ('name', 'sku', 'image', 'description', 'specifications_text'),
-            'description': 'الصورة هنا هي الصورة الرئيسية. يمكن إضافة أربع صور اختيارية أخرى أسفل الصفحة.',
+            'fields': ('name', 'sku', 'description', 'specifications_text'),
         }),
         ('الأسعار والمخزون', {'fields': ('buy_price', 'sell_price', 'quantity', 'is_offer')}),
         ('الإبراز وأولوية الظهور', {

@@ -90,7 +90,10 @@ class ProductAvailabilityDisplayTests(TestCase):
 
 
 class ProductGalleryTests(TestCase):
-    def test_four_optional_images_are_allowed_and_fifth_is_rejected(self):
+    def test_gallery_accepts_nine_extra_images_and_rejects_the_tenth(self):
+        """الحد الأقصى عشر صور: الرئيسية + تسع في المعرض."""
+        from .models import MAX_GALLERY_IMAGES, MAX_PRODUCT_IMAGES
+
         with tempfile.TemporaryDirectory() as media_root:
             with override_settings(MEDIA_ROOT=media_root):
                 product = Product.objects.create(
@@ -100,26 +103,27 @@ class ProductGalleryTests(TestCase):
                     quantity=5,
                     image=_uploaded_test_image(800, 800),
                 )
-                for position in range(1, 5):
+                for position in range(1, MAX_GALLERY_IMAGES + 1):
                     ProductImage.objects.create(
                         product=product,
                         image=_uploaded_test_image(800, 800),
                         position=position,
                     )
 
-                self.assertEqual(product.gallery_images.count(), 4)
+                self.assertEqual(product.gallery_images.count(), MAX_GALLERY_IMAGES)
                 first_gallery_image = product.gallery_images.first()
                 with Image.open(first_gallery_image.image.path) as image:
                     self.assertEqual(image.size, (CANVAS_SIZE, CANVAS_SIZE))
 
                 response = self.client.get(f"/product/{product.pk}/")
-                self.assertEqual(response.content.count(b'data-image='), 5)
+                self.assertEqual(response.content.count(b'data-image='),
+                                 MAX_PRODUCT_IMAGES)
 
                 with self.assertRaises(ValidationError):
                     ProductImage.objects.create(
                         product=product,
                         image=_uploaded_test_image(800, 800),
-                        position=4,
+                        position=1,
                     )
 
 
@@ -394,3 +398,103 @@ class LegacyEndpointsClosedTests(TestCase):
                                    HTTP_AUTHORIZATION=f'Token {device.token}')
         self.assertEqual(response.status_code, 200)
         self.assertIn('pending_orders', response.json())
+
+
+class UnifiedImageUploaderTests(TestCase):
+    """رفع الصور من مكان واحد.
+
+    تمرّ الاختبارات بمسار لوحة الإدارة الحقيقي: save(commit=False) ثم حفظ
+    الكائن ثم save_model — لا باستدعاء save(commit=True) مباشرة، لأن ذلك
+    لا يشبه ما يحدث فعلاً وقد يُخفي أخطاء.
+    """
+
+    def _save_through_admin(self, files, data=None, instance=None):
+        from django.contrib import admin as django_admin
+        from django.utils.datastructures import MultiValueDict
+
+        payload = {
+            'name': 'منتج', 'sku': '1', 'description': '',
+            'specifications_text': '', 'buy_price': 1000, 'sell_price': 1500,
+            'quantity': 4, 'is_offer': False, 'category': '', 'series': '',
+            'featured_priority': 0,
+        }
+        payload.update(data or {})
+        multi = MultiValueDict()
+        for key, value in payload.items():
+            multi.setlist(key, value if isinstance(value, list) else [value])
+
+        form = ProductAdminForm(multi, MultiValueDict({'product_images': list(files)}),
+                                instance=instance)
+        if not form.is_valid():
+            return form, None
+
+        product = form.save(commit=False)          # كما تفعل اللوحة
+        model_admin = django_admin.site._registry[Product]
+        model_admin.save_model(None, product, form, change=instance is not None)
+        form.save_m2m()
+        product.refresh_from_db()
+        return form, product
+
+    def test_first_upload_becomes_main_and_rest_go_to_gallery(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                form, product = self._save_through_admin(
+                    [_uploaded_test_image(600, 600) for _ in range(4)])
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertTrue(product.image, 'الصورة الأولى لم تصبح رئيسية')
+                self.assertEqual(product.gallery_images.count(), 3)
+
+    def test_more_images_append_to_the_existing_ones(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                _, product = self._save_through_admin(
+                    [_uploaded_test_image(600, 600) for _ in range(3)])
+                form, product = self._save_through_admin(
+                    [_uploaded_test_image(600, 600) for _ in range(2)], instance=product)
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertEqual(1 + product.gallery_images.count(), 5)
+
+    def test_uploading_past_the_limit_is_refused(self):
+        from .models import MAX_PRODUCT_IMAGES
+
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                form, product = self._save_through_admin(
+                    [_uploaded_test_image(400, 400)
+                     for _ in range(MAX_PRODUCT_IMAGES + 1)])
+                self.assertFalse(form.is_valid())
+                self.assertIsNone(product)
+                self.assertIn(str(MAX_PRODUCT_IMAGES), str(form.errors))
+
+    def test_marked_images_are_deleted_on_save(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                _, product = self._save_through_admin(
+                    [_uploaded_test_image(600, 600) for _ in range(3)])
+                extra = product.gallery_images.first()
+
+                form, product = self._save_through_admin(
+                    [], data={'pi_remove': f'g{extra.pk}'}, instance=product)
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertEqual(product.gallery_images.count(), 1)
+                self.assertTrue(product.image, 'الرئيسية حُذفت بالخطأ')
+
+    def test_removing_the_main_image_promotes_nothing_but_clears_it(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                _, product = self._save_through_admin(
+                    [_uploaded_test_image(600, 600) for _ in range(2)])
+                form, product = self._save_through_admin(
+                    [], data={'pi_remove': 'main'}, instance=product)
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertFalse(product.image, 'الرئيسية لم تُحذف')
+                self.assertEqual(product.gallery_images.count(), 1)
+
+    def test_non_image_upload_is_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        bad = SimpleUploadedFile('notes.txt', b'hello', content_type='text/plain')
+        form, product = self._save_through_admin([bad])
+        self.assertFalse(form.is_valid())
+        self.assertIsNone(product)
+        self.assertIn('ليس صورة', str(form.errors))

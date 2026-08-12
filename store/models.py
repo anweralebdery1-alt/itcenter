@@ -241,6 +241,11 @@ class Product(ImageCompressMixin, models.Model):
         return text[:160]
 
 
+# أقصى عدد صور للمنتج: الرئيسية + الباقي في المعرض
+MAX_PRODUCT_IMAGES = 10
+MAX_GALLERY_IMAGES = MAX_PRODUCT_IMAGES - 1
+
+
 class ProductImage(ImageCompressMixin, models.Model):
     image_fields = ('image',)
     product = models.ForeignKey(
@@ -251,7 +256,7 @@ class ProductImage(ImageCompressMixin, models.Model):
     image = models.ImageField(upload_to='products/gallery/')
     position = models.PositiveSmallIntegerField(
         default=1,
-        validators=[MinValueValidator(1), MaxValueValidator(4)],
+        validators=[MinValueValidator(1), MaxValueValidator(MAX_GALLERY_IMAGES)],
     )
     alt_text = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -267,9 +272,9 @@ class ProductImage(ImageCompressMixin, models.Model):
             existing = ProductImage.objects.filter(product_id=self.product_id)
             if self.pk:
                 existing = existing.exclude(pk=self.pk)
-            if existing.count() >= 4:
+            if existing.count() >= MAX_GALLERY_IMAGES:
                 raise ValidationError(
-                    'يمكن إضافة أربع صور إضافية فقط، ليكون الإجمالي خمس صور.'
+                    f'الحد الأقصى {MAX_PRODUCT_IMAGES} صور للمنتج الواحد.'
                 )
 
     def process_image_field(self, field_name, field_file):

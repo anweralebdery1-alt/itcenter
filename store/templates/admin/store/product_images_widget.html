@@ -1,0 +1,225 @@
+{% load static %}
+<div class="pi-uploader" id="pi-uploader" data-max="{{ max_images }}">
+  <style>
+    .pi-uploader { --pi-blue:#1565C0; --pi-line:#d7e1ec; --pi-muted:#64748b; }
+    .pi-drop {
+      border: 2px dashed var(--pi-line); border-radius: 12px; background: #f8fafd;
+      padding: 22px 16px; text-align: center; cursor: pointer; transition: .15s;
+      direction: rtl;
+    }
+    .pi-drop:hover, .pi-drop.pi-over { border-color: var(--pi-blue); background: #eef5fd; }
+    .pi-drop.pi-full { opacity: .55; cursor: not-allowed; border-style: solid; }
+    .pi-drop h4 { margin: 0 0 6px; color: var(--pi-blue); font-size: 15px; }
+    .pi-drop p { margin: 2px 0; color: var(--pi-muted); font-size: 12px; }
+    .pi-drop kbd {
+      background:#fff; border:1px solid var(--pi-line); border-bottom-width:2px;
+      border-radius:5px; padding:1px 6px; font-size:11px; color:#334;
+    }
+    .pi-count { font-weight: 700; color: var(--pi-blue); }
+    .pi-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+      gap: 12px; margin-top: 14px; direction: rtl;
+    }
+    .pi-card {
+      position: relative; border: 1px solid var(--pi-line); border-radius: 10px;
+      overflow: hidden; background: #fff;
+    }
+    .pi-card img { width: 100%; height: 118px; object-fit: cover; display: block; }
+    .pi-card.pi-removed { opacity: .35; }
+    .pi-card.pi-removed img { filter: grayscale(1); }
+    .pi-badge {
+      position: absolute; top: 6px; right: 6px; background: var(--pi-blue); color: #fff;
+      font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+    }
+    .pi-badge.pi-new { background: #2E7D32; }
+    .pi-del {
+      position: absolute; top: 6px; left: 6px; width: 24px; height: 24px;
+      border: 0; border-radius: 50%; background: rgba(198,40,40,.92); color: #fff;
+      font-size: 15px; line-height: 1; cursor: pointer;
+    }
+    .pi-del:hover { background: #b71c1c; }
+    .pi-note { font-size: 11px; color: var(--pi-muted); text-align: center; padding: 4px; }
+    .pi-error { color: #C62828; font-weight: 700; text-align: center; margin-top: 8px; direction: rtl; }
+  </style>
+
+  <div class="pi-drop" id="pi-drop">
+    <h4>📷 صور المنتج</h4>
+    <p>اسحب الصور هنا · أو <b>الصق</b> بـ<kbd>Ctrl</kbd>+<kbd>V</kbd> · أو انقر للاختيار من الحاسبة</p>
+    <p>الأولى تكون الصورة الرئيسية · <span class="pi-count" id="pi-count">0</span> من {{ max_images }}</p>
+  </div>
+
+  <input type="file" name="{{ field_name }}" id="pi-input" multiple accept="image/*" hidden>
+  <div id="pi-removed-inputs"></div>
+  <div class="pi-error" id="pi-error"></div>
+
+  <div class="pi-grid" id="pi-grid">
+    {% for item in existing %}
+      <div class="pi-card" data-existing="{{ item.token }}">
+        <img src="{{ item.url }}" alt="">
+        <span class="pi-badge">{% if item.is_main %}رئيسية{% else %}{{ forloop.counter }}{% endif %}</span>
+        <button type="button" class="pi-del" title="حذف">×</button>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="pi-note">الصور المحذوفة تُحذف نهائياً عند الحفظ. الصورة الأولى هي التي تظهر في قوائم المتجر.</div>
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById('pi-uploader');
+  if (!root || root.dataset.ready) { return; }
+  root.dataset.ready = '1';
+
+  var MAX = parseInt(root.dataset.max, 10) || 10;
+  var input = document.getElementById('pi-input');
+  var drop = document.getElementById('pi-drop');
+  var grid = document.getElementById('pi-grid');
+  var counter = document.getElementById('pi-count');
+  var errorBox = document.getElementById('pi-error');
+  var removedBox = document.getElementById('pi-removed-inputs');
+  var picked = [];                       // ملفات جديدة لم تُحفظ بعد
+
+  function existingAlive() {
+    return grid.querySelectorAll('.pi-card[data-existing]:not(.pi-removed)').length;
+  }
+  function total() { return existingAlive() + picked.length; }
+
+  function say(message) {
+    errorBox.textContent = message || '';
+    if (message) { setTimeout(function () { errorBox.textContent = ''; }, 4000); }
+  }
+
+  function syncInput() {
+    // ندفع الملفات المختارة إلى حقل الرفع ليُرسل مع الاستمارة عادةً
+    var bag = new DataTransfer();
+    picked.forEach(function (file) { bag.items.add(file); });
+    input.files = bag.files;
+
+    counter.textContent = total();
+    drop.classList.toggle('pi-full', total() >= MAX);
+  }
+
+  function addPreview(file) {
+    var card = document.createElement('div');
+    card.className = 'pi-card';
+    var img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    var badge = document.createElement('span');
+    badge.className = 'pi-badge pi-new';
+    badge.textContent = 'جديدة';
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'pi-del';
+    del.title = 'إزالة';
+    del.textContent = '×';
+    del.addEventListener('click', function () {
+      var at = picked.indexOf(file);
+      if (at > -1) { picked.splice(at, 1); }
+      URL.revokeObjectURL(img.src);
+      card.remove();
+      syncInput();
+    });
+    card.appendChild(img);
+    card.appendChild(badge);
+    card.appendChild(del);
+    grid.appendChild(card);
+  }
+
+  function accept(files) {
+    var added = 0, rejected = 0;
+    Array.prototype.forEach.call(files, function (file) {
+      if (!file || file.type.indexOf('image/') !== 0) { rejected++; return; }
+      if (total() >= MAX) { rejected++; return; }
+      picked.push(file);
+      addPreview(file);
+      added++;
+    });
+    syncInput();
+    if (rejected && total() >= MAX) {
+      say('الحد الأقصى ' + MAX + ' صور — لم تُضف ' + rejected + '.');
+    } else if (rejected) {
+      say('تُقبل الصور فقط.');
+    }
+    return added;
+  }
+
+  // --- اختيار من الحاسبة ---
+  drop.addEventListener('click', function () {
+    if (total() >= MAX) { say('بلغت الحد الأقصى ' + MAX + ' صور.'); return; }
+    input.value = '';                    // ليعمل اختيار نفس الملف مجدداً
+    input.click();
+  });
+  input.addEventListener('change', function (event) {
+    var chosen = Array.prototype.slice.call(event.target.files);
+    input.value = '';                    // نُفرغ الحقل فوراً ليبقى جاهزاً للتالي
+    accept(chosen);
+  });
+
+  // --- السحب والإفلات ---
+  ['dragenter', 'dragover'].forEach(function (name) {
+    drop.addEventListener(name, function (event) {
+      event.preventDefault(); drop.classList.add('pi-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (name) {
+    drop.addEventListener(name, function (event) {
+      event.preventDefault(); drop.classList.remove('pi-over');
+    });
+  });
+  drop.addEventListener('drop', function (event) {
+    accept(event.dataTransfer.files);
+  });
+
+  // --- اللصق: صورة منسوخة من أي مكان ---
+  document.addEventListener('paste', function (event) {
+    var data = event.clipboardData;
+    if (!data) { return; }
+    var files = [];
+    Array.prototype.forEach.call(data.items || [], function (item) {
+      if (item.kind === 'file' && item.type.indexOf('image/') === 0) {
+        var file = item.getAsFile();
+        if (file) {
+          // لقطات الحافظة بلا اسم — نمنحها اسماً ليُحفظ الامتداد صحيحاً
+          if (!file.name || file.name === 'image.png') {
+            var extension = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+            file = new File([file], 'pasted-' + Date.now() + '.' + extension,
+                            { type: file.type });
+          }
+          files.push(file);
+        }
+      }
+    });
+    if (files.length) {
+      event.preventDefault();
+      var added = accept(files);
+      if (added) { say(''); drop.classList.add('pi-over');
+                   setTimeout(function () { drop.classList.remove('pi-over'); }, 250); }
+    }
+  });
+
+  // --- حذف صورة محفوظة ---
+  grid.addEventListener('click', function (event) {
+    var button = event.target.closest('.pi-del');
+    if (!button) { return; }
+    var card = button.closest('.pi-card[data-existing]');
+    if (!card) { return; }
+
+    var token = card.dataset.existing;
+    if (card.classList.contains('pi-removed')) {
+      card.classList.remove('pi-removed');
+      var marker = removedBox.querySelector('input[value="' + token + '"]');
+      if (marker) { marker.remove(); }
+    } else {
+      card.classList.add('pi-removed');
+      var field = document.createElement('input');
+      field.type = 'hidden';
+      field.name = 'pi_remove';
+      field.value = token;
+      removedBox.appendChild(field);
+    }
+    syncInput();
+  });
+
+  syncInput();
+})();
+</script>
