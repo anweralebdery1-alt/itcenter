@@ -421,6 +421,10 @@
     }
     .cat-menu a:hover, .cat-menu a.active { background: var(--blue); color: #fff; }
     .cat-menu a.cat-menu-all { font-weight: 800; border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; margin-bottom: 4px; }
+    /* الفروع الأعمق تُزاح لليمين لتبان تبعيّتها */
+    .cat-menu a.cat-menu-depth-2 { padding-inline-start: 26px; font-size: 13px; }
+    .cat-menu a.cat-menu-depth-3 { padding-inline-start: 40px; font-size: 13px; }
+    .cat-menu a.cat-menu-depth-4 { padding-inline-start: 54px; font-size: 13px; }
 
     /* ---------- Buttons ---------- */
     .btn { border-radius: var(--radius-sm); font-weight: 800; transition: filter .15s ease, transform .15s ease, box-shadow .15s ease; }
@@ -691,21 +695,20 @@
       <span class="filter-label">التصنيفات:</span>
       <a class="chip {% if not selected_category %}active{% endif %}" href="/?view=electronics">All</a>
       {% for c in categories %}
-        {% with subs=c.children.all %}
         <div class="cat-dropdown">
           <a class="chip cat-chip {% if selected_category == c.id|stringformat:'s' %}active{% endif %}" href="/?view=electronics&category={{ c.id }}">
-            {{ c.name }}{% if subs %}<span class="cat-caret">▾</span>{% endif %}
+            {{ c.name }}{% if c.subs %}<span class="cat-caret">▾</span>{% endif %}
           </a>
-          {% if subs %}
+          {% if c.subs %}
           <div class="cat-menu">
             <a class="cat-menu-all {% if selected_category == c.id|stringformat:'s' %}active{% endif %}" href="/?view=electronics&category={{ c.id }}">All {{ c.name }}</a>
-            {% for sub in subs %}
-              <a class="{% if selected_category == sub.id|stringformat:'s' %}active{% endif %}" href="/?view=electronics&category={{ sub.id }}">{{ sub.name }}</a>
+            {% comment %} كل ما تحت التصنيف مهما تعمّق، والعمق يظهر بالإزاحة {% endcomment %}
+            {% for sub in c.flat_subs %}
+              <a class="cat-menu-depth-{{ sub.depth }} {% if selected_category == sub.id|stringformat:'s' %}active{% endif %}" href="/?view=electronics&category={{ sub.id }}">{{ sub.name }}</a>
             {% endfor %}
           </div>
           {% endif %}
         </div>
-        {% endwith %}
       {% endfor %}
     </div>
   </div>
@@ -752,25 +755,7 @@
       <a href="/?view=electronics">كل المنتجات</a>
       <div class="drawer-section">التصنيفات</div>
       {% for c in categories %}
-        {% with subs=c.children.all %}
-        <div class="drawer-cat">
-          <div class="drawer-cat-row">
-            <a class="drawer-cat-link" href="/?view=electronics&category={{ c.id }}">{{ c.name }}</a>
-            {% if subs %}
-            <button type="button" class="drawer-cat-toggle" aria-label="عرض الفروع">
-              <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-            {% endif %}
-          </div>
-          {% if subs %}
-          <div class="drawer-sub">
-            {% for sub in subs %}
-              <a href="/?view=electronics&category={{ sub.id }}">{{ sub.name }}</a>
-            {% endfor %}
-          </div>
-          {% endif %}
-        </div>
-        {% endwith %}
+        {% include "store/_drawer_category.html" with node=c %}
       {% endfor %}
       <a href="{% url 'about' %}" class="drawer-about">حولنا</a>
     </nav>

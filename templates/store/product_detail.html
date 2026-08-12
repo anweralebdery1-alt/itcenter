@@ -238,8 +238,7 @@
 
       <h5 class="fw-bold mt-4">المواصفات</h5>
       <table class="spec-table">
-        <tr><td>التصنيف</td><td>{{ product.category.name|default:"غير مصنف" }}</td></tr>
-        <tr><td>السلسلة</td><td>{{ product.series.name|default:"غير محدد" }}</td></tr>
+        <tr><td>التصنيف</td><td>{{ product.category.full_path|default:"غير مصنف" }}</td></tr>
         <tr><td>رمز المنتج</td><td>{{ product.sku }}</td></tr>
         {% for key, value in product.specifications.items %}
           <tr><td>{{ key }}</td><td>{{ value }}</td></tr>

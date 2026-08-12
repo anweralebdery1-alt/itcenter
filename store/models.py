@@ -81,12 +81,53 @@ class Category(models.Model):
         verbose_name_plural = 'التصنيفات'
 
     def __str__(self):
-        if self.parent_id:
-            return f'{self.parent.name} › {self.name}'
-        return self.name
-class Series(models.Model):
-    name = models.CharField(max_length=200)
-    def __str__(self): return self.name
+        return self.full_path
+
+    @property
+    def full_path(self):
+        """المسار كاملاً: «الأب › الابن › الحفيد» مهما تعمّق."""
+        names = [self.name]
+        node = self
+        seen = {self.pk}
+        while node.parent_id and node.parent_id not in seen:
+            seen.add(node.parent_id)
+            node = node.parent
+            names.append(node.name)
+        return ' › '.join(reversed(names))
+
+    def ancestor_ids(self):
+        """معرّفات الآباء من الأقرب إلى الجذر."""
+        ids = []
+        node = self
+        while node.parent_id and node.parent_id not in ids and node.parent_id != self.pk:
+            ids.append(node.parent_id)
+            node = node.parent
+        return ids
+
+    def descendant_ids(self):
+        """معرّف هذا التصنيف وكل ما تحته مهما تعمّق (للتصفية في المتجر)."""
+        ids = [self.pk]
+        frontier = [self.pk]
+        while frontier:
+            children = list(
+                Category.objects.filter(parent_id__in=frontier)
+                .exclude(pk__in=ids)
+                .values_list('id', flat=True)
+            )
+            if not children:
+                break
+            ids.extend(children)
+            frontier = children
+        return ids
+
+    def clean(self):
+        """يمنع أن يصير التصنيف أباً لنفسه أو لأحد آبائه — حلقة تُجمّد الشجرة."""
+        if self.parent_id and self.pk:
+            if self.parent_id == self.pk:
+                raise ValidationError({'parent': 'لا يمكن أن يكون التصنيف أباً لنفسه.'})
+            if self.pk in Category.objects.get(pk=self.parent_id).ancestor_ids():
+                raise ValidationError(
+                    {'parent': 'لا يمكن نقل التصنيف تحت أحد فروعه.'})
 
 class SiteSettings(ImageCompressMixin, models.Model):
     image_fields = ('logo', 'hero_image')
@@ -169,7 +210,6 @@ class Product(ImageCompressMixin, models.Model):
     sell_price = models.FloatField(default=0)
     quantity = models.IntegerField(default=0)
     category = models.ForeignKey(Category, null=True, blank=True, on_delete=models.SET_NULL)
-    series = models.ForeignKey(Series, null=True, blank=True, on_delete=models.SET_NULL)
     is_offer = models.BooleanField(default=False)
     is_featured = models.BooleanField(default=False, verbose_name='منتج مميّز')
     featured_priority = models.IntegerField(default=0, blank=True, verbose_name='أولوية الظهور',

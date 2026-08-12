@@ -1,0 +1,21 @@
+{% comment %} عقدة واحدة في شجرة التصنيفات — تستدعي نفسها لفروعها {% endcomment %}
+<li class="ct-node" data-id="{{ node.id }}" data-name="{{ node.name }}">
+  <div class="ct-row{% if not node.is_active %} off{% endif %}">
+    <button type="button" class="ct-caret{% if not node.subs %} leaf{% endif %}" aria-label="طيّ/فتح">▾</button>
+    <span class="ct-name"><a href="{{ node.change_url }}">{{ node.name }}</a></span>
+    <span class="ct-tag">{{ node.own_count }} منتج{% if node.subs %} · {{ node.total_count }} مع الفروع{% endif %}</span>
+    {% if not node.is_active %}<span class="ct-tag off">مُعطّل</span>{% endif %}
+    <span class="ct-actions">
+      {% if can_add %}<button type="button" class="ct-mini" data-add>＋ فرع</button>{% endif %}
+      <a class="ct-mini plain" href="{{ node.change_url }}">تعديل</a>
+      <a class="ct-mini plain" href="{{ node.shop_url }}" target="_blank">في المتجر</a>
+    </span>
+  </div>
+  {% if node.subs %}
+  <ul>
+    {% for sub in node.subs %}
+      {% include "admin/store/category_tree_node.html" with node=sub %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+</li>

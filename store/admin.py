@@ -3,8 +3,10 @@ import json
 from django import forms
 from django.contrib import admin
 from django.core.exceptions import ValidationError
+from django.db.models import Count
 from django.http import JsonResponse
 from django.template.loader import render_to_string
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 from .models import (
@@ -26,7 +28,6 @@ from .models import (
     StockMove,
     Review,
     SaleReservation,
-    Series,
     SiteSection,
     SiteSettings,
     TeamMember,
@@ -91,20 +92,118 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         return not SiteSettings.objects.exists()
 
 
+class CategoryAdminForm(forms.ModelForm):
+    """استمارة التصنيف: الأب يُختار بنفس القوائم المتتابعة المستعملة في المنتج."""
+
+    class Meta:
+        model = Category
+        fields = ('name', 'parent', 'order', 'is_active')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['parent'] = CategoryCascadeField(
+            label='التصنيف الأب',
+            help_text='اتركه فارغاً ليكون تصنيفاً رئيسياً.',
+            exclude_branch=self.instance if self.instance.pk else None,
+        )
+        self.fields['parent'].initial = self.instance.parent_id
+
+
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
+    """صفحة التصنيفات: شجرة واحدة للكل، وإضافة الفروع من مكانها.
+
+    كانت قائمة مسطّحة من ٦٥ سطراً لا يُعرف منها من ابن من. صارت شجرة
+    الرئيسية أولاً وتحت كل واحد فروعه، ومع كل عقدة زر «＋ فرع» يضيف تحتها
+    مباشرة — نفس نقطة الإضافة التي تستعملها استمارة المنتج.
+    """
+
+    form = CategoryAdminForm
     list_display = ('name', 'parent', 'order', 'is_active')
     list_editable = ('order', 'is_active')
     search_fields = ('name',)
-    list_filter = ('is_active', 'parent')
+    list_filter = ('is_active',)
     ordering = ('order', 'name')
-    fields = ('name', 'parent', 'order', 'is_active')
 
+    def get_urls(self):
+        return [
+            path('quick-add/', self.admin_site.admin_view(self.category_quick_add),
+                 name='store_category_quick_add'),
+        ] + super().get_urls()
 
-@admin.register(Series)
-class SeriesAdmin(admin.ModelAdmin):
-    list_display = ('name',)
-    search_fields = ('name',)
+    def changelist_view(self, request, extra_context=None):
+        # ?flat=1 يُرجع جدول جانغو المعتاد (للتعديل الجماعي والحذف)
+        if request.GET.get('flat'):
+            return super().changelist_view(request, extra_context)
+
+        counts = dict(
+            Product.objects.visible()
+            .exclude(category__isnull=True)
+            .values_list('category')
+            .annotate(total=Count('id'))
+        )
+        nodes = list(Category.objects.order_by('order', 'name'))
+        by_parent = {}
+        for node in nodes:
+            by_parent.setdefault(node.parent_id, []).append(node)
+
+        def build(parent_id, depth):
+            branch = []
+            for node in by_parent.get(parent_id, []):
+                subs = build(node.pk, depth + 1)
+                branch.append({
+                    'id': node.pk,
+                    'name': node.name,
+                    'is_active': node.is_active,
+                    'own_count': counts.get(node.pk, 0),
+                    'total_count': counts.get(node.pk, 0) + sum(s['total_count'] for s in subs),
+                    'change_url': reverse('admin:store_category_change', args=[node.pk]),
+                    'shop_url': f'/?view=electronics&category={node.pk}',
+                    'subs': subs,
+                })
+            return branch
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'التصنيفات',
+            'opts': self.model._meta,
+            'roots': build(None, 0),
+            'total': len(nodes),
+            'add_url': reverse('admin:store_category_quick_add'),
+            'flat_url': f'{request.path}?flat=1',
+            'can_add': request.user.has_perm('store.add_category'),
+        }
+        return TemplateResponse(request, 'admin/store/category_tree.html', context)
+
+    def category_quick_add(self, request):
+        """يضيف تصنيفاً من شجرة التصنيفات أو من استمارة المنتج بلا مغادرة الصفحة."""
+        if request.method != 'POST':
+            return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+        if not request.user.has_perm('store.add_category'):
+            return JsonResponse({'ok': False, 'error': 'لا صلاحية لإضافة تصنيف.'},
+                                status=403)
+
+        name = (request.POST.get('name') or '').strip()
+        if not name:
+            return JsonResponse({'ok': False, 'error': 'اكتب اسم التصنيف.'})
+
+        parent = None
+        parent_id = (request.POST.get('parent') or '').strip()
+        if parent_id:
+            parent = Category.objects.filter(pk=parent_id).first()
+            if parent is None:
+                return JsonResponse({'ok': False, 'error': 'التصنيف الأب غير موجود.'})
+
+        if Category.objects.filter(name=name, parent=parent).exists():
+            return JsonResponse({'ok': False, 'error': f'«{name}» موجود هنا مسبقاً.'})
+
+        category = Category.objects.create(name=name, parent=parent)
+        return JsonResponse({
+            'ok': True,
+            'id': category.pk,
+            'name': category.name,
+            'parent': str(parent.pk) if parent else None,
+        })
 
 
 @admin.register(SiteSection)
@@ -158,6 +257,11 @@ class CategoryCascadeWidget(forms.Widget):
     جديد في أي مستوى بلا مغادرة الصفحة.
     """
 
+    def __init__(self, attrs=None, exclude_branch=None):
+        super().__init__(attrs)
+        # عند تعديل تصنيف لا يجوز أن يُعرض هو ولا فروعه كأب له
+        self.excluded = set(exclude_branch.descendant_ids()) if exclude_branch else set()
+
     def get_context(self, name, value, attrs):
         return {}
 
@@ -166,7 +270,10 @@ class CategoryCascadeWidget(forms.Widget):
 
     def render(self, name, value, attrs=None, renderer=None):
         tree = {'__roots__': []}
-        for category in Category.objects.filter(is_active=True).order_by('order', 'name'):
+        queryset = Category.objects.filter(is_active=True).order_by('order', 'name')
+        if self.excluded:
+            queryset = queryset.exclude(pk__in=self.excluded)
+        for category in queryset:
             tree[str(category.pk)] = {
                 'name': category.name,
                 'parent': str(category.parent_id) if category.parent_id else None,
@@ -190,12 +297,12 @@ class CategoryCascadeWidget(forms.Widget):
 
 
 class CategoryCascadeField(forms.ModelChoiceField):
-    widget = CategoryCascadeWidget
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, exclude_branch=None, **kwargs):
         kwargs.setdefault('queryset', Category.objects.all())
         kwargs.setdefault('required', False)
         kwargs.setdefault('label', 'التصنيف')
+        kwargs.setdefault('widget', CategoryCascadeWidget(exclude_branch=exclude_branch))
         super().__init__(*args, **kwargs)
 
 
@@ -376,46 +483,11 @@ class ProductAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         form.apply_images(obj)
 
-    def get_urls(self):
-        return [
-            path('category-quick-add/', self.admin_site.admin_view(self.category_quick_add),
-                 name='store_category_quick_add'),
-        ] + super().get_urls()
-
-    def category_quick_add(self, request):
-        """يضيف تصنيفاً من داخل استمارة المنتج بلا مغادرة الصفحة."""
-        if request.method != 'POST':
-            return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
-        if not request.user.has_perm('store.add_category'):
-            return JsonResponse({'ok': False, 'error': 'لا صلاحية لإضافة تصنيف.'},
-                                status=403)
-
-        name = (request.POST.get('name') or '').strip()
-        if not name:
-            return JsonResponse({'ok': False, 'error': 'اكتب اسم التصنيف.'})
-
-        parent = None
-        parent_id = (request.POST.get('parent') or '').strip()
-        if parent_id:
-            parent = Category.objects.filter(pk=parent_id).first()
-            if parent is None:
-                return JsonResponse({'ok': False, 'error': 'التصنيف الأب غير موجود.'})
-
-        if Category.objects.filter(name=name, parent=parent).exists():
-            return JsonResponse({'ok': False, 'error': f'«{name}» موجود هنا مسبقاً.'})
-
-        category = Category.objects.create(name=name, parent=parent)
-        return JsonResponse({
-            'ok': True,
-            'id': category.pk,
-            'name': category.name,
-            'parent': str(parent.pk) if parent else None,
-        })
     list_display = ('name', 'sku', 'sell_price', 'quantity', 'category',
                     'is_featured', 'featured_priority', 'is_offer', 'views_count', 'updated_at')
     list_editable = ('sell_price', 'quantity', 'is_featured', 'featured_priority', 'is_offer')
     search_fields = ('name', 'sku', 'description')
-    list_filter = ('is_featured', 'category', 'series', 'is_offer')
+    list_filter = ('is_featured', 'category', 'is_offer')
     ordering = ('-is_featured', 'featured_priority', '-updated_at')
     readonly_fields = ('uuid', 'views_count', 'created_at', 'updated_at')
     actions = ('mark_featured', 'unmark_featured')
@@ -433,7 +505,7 @@ class ProductAdmin(admin.ModelAdmin):
             'fields': ('is_featured', 'featured_priority'),
             'description': 'فعّل «منتج مميّز» ليظهر أولاً في الصفحة الرئيسية. الأولوية الأعلى تظهر قبل غيرها.',
         }),
-        ('التنظيم', {'fields': ('category', 'series')}),
+        ('التنظيم', {'fields': ('category',)}),
         ('معلومات النظام', {'fields': ('uuid', 'views_count', 'created_at', 'updated_at')}),
     )
 

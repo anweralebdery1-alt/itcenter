@@ -6,6 +6,7 @@ from html import unescape
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.urls import reverse
 from PIL import Image
 
 from .image_processing import (
@@ -146,8 +147,7 @@ class ProductAdminSpecificationsTests(TestCase):
                 'quantity': 4,
                 'is_offer': False,
                 'category': '',
-                'series': '',
-            }
+                            }
         )
 
         self.assertTrue(form.is_valid(), form.errors)
@@ -173,8 +173,7 @@ class ProductAdminSpecificationsTests(TestCase):
                 'quantity': 4,
                 'is_offer': False,
                 'category': '',
-                'series': '',
-            }
+                            }
         )
 
         self.assertFalse(form.is_valid())
@@ -417,8 +416,7 @@ class UnifiedImageUploaderTests(TestCase):
         payload = {
             'name': 'منتج', 'sku': '1', 'description': '',
             'specifications_text': '', 'buy_price': 1000, 'sell_price': 1500,
-            'quantity': 4, 'is_offer': False, 'category': '', 'series': '',
-            'featured_priority': 0,
+            'quantity': 4, 'is_offer': False, 'category': '',             'featured_priority': 0,
         }
         payload.update(data or {})
         multi = MultiValueDict()
@@ -513,7 +511,7 @@ class CategoryCascadeTests(TestCase):
         from django.contrib.auth.models import User
         from .models import Category
 
-        self.url = '/admin/store/product/category-quick-add/'
+        self.url = reverse('admin:store_category_quick_add')
         self.boss = User.objects.create_superuser('boss', 'b@x.com', 'pw-12345678')
         self.clerk = User.objects.create_user('clerk', 'c@x.com', 'pw-12345678',
                                               is_staff=True)
@@ -594,8 +592,7 @@ class CategoryCascadeTests(TestCase):
         payload = MultiValueDict()
         for key, value in {'name': 'منتج', 'sku': 'CC-1', 'description': '',
                            'specifications_text': '', 'buy_price': 1000,
-                           'sell_price': 1500, 'quantity': 2, 'series': '',
-                           'featured_priority': 0,
+                           'sell_price': 1500, 'quantity': 2,                            'featured_priority': 0,
                            'category': str(self.child.pk)}.items():
             payload.setlist(key, [value])
 
@@ -608,3 +605,87 @@ class CategoryCascadeTests(TestCase):
         product.refresh_from_db()
 
         self.assertEqual(product.category, self.child)
+
+
+class CategoryUnifiedTreeTests(TestCase):
+    """مصدر واحد للتصنيفات: قائمة الثلاث خطوط، شريط التصفية، وصفحة الإدارة.
+
+    الشجرة صارت بعمق حر، فالفحص هنا يبني ثلاثة مستويات ويتأكد أن كل واجهة
+    تعرضها وأن التصفية تلتقط الأحفاد لا الأبناء فقط.
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from .models import Category
+
+        self.root = Category.objects.create(name='روبوتات')
+        self.child = Category.objects.create(name='درونات', parent=self.root)
+        self.grandchild = Category.objects.create(name='مراوح درون', parent=self.child)
+        self.boss = User.objects.create_superuser('boss2', 'b2@x.com', 'pw-12345678')
+
+        self.deep_product = Product.objects.create(
+            name='مروحة كاربون', sku='DR-1', sell_price=5000, quantity=4,
+            category=self.grandchild)
+
+    def test_choosing_a_root_shows_products_of_its_grandchildren(self):
+        response = self.client.get('/', {'view': 'electronics',
+                                         'category': self.root.pk})
+        self.assertContains(response, 'مروحة كاربون')
+
+    def test_descendant_ids_covers_every_level(self):
+        ids = self.root.descendant_ids()
+        self.assertEqual(set(ids),
+                         {self.root.pk, self.child.pk, self.grandchild.pk})
+
+    def test_drawer_menu_renders_the_third_level(self):
+        response = self.client.get('/')
+        self.assertContains(response, 'درونات')
+        self.assertContains(response, 'مراوح درون')
+
+    def test_full_path_shows_the_whole_chain(self):
+        self.assertEqual(self.grandchild.full_path, 'روبوتات › درونات › مراوح درون')
+
+    # ملفات static المضغوطة لا تُجمَّع في بيئة الاختبار، فنستعمل التخزين البسيط
+    _plain_static = override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
+
+    @_plain_static
+    def test_admin_page_is_a_tree_with_counts(self):
+        self.client.force_login(self.boss)
+        response = self.client.get(reverse('admin:store_category_changelist'))
+
+        self.assertTemplateUsed(response, 'admin/store/category_tree.html')
+        self.assertContains(response, 'مراوح درون')
+        self.assertContains(response, 'ct-tree')
+        # المنتج محسوب على تصنيفه وعلى مجموع أجداده
+        self.assertContains(response, '1 منتج')
+
+    @_plain_static
+    def test_admin_flat_view_still_available(self):
+        self.client.force_login(self.boss)
+        response = self.client.get(
+            reverse('admin:store_category_changelist'), {'flat': '1'})
+
+        self.assertTemplateNotUsed(response, 'admin/store/category_tree.html')
+
+    def test_a_category_cannot_be_moved_under_its_own_branch(self):
+        self.root.parent = self.grandchild
+        with self.assertRaises(ValidationError):
+            self.root.full_clean()
+
+    def test_parent_chooser_hides_the_category_and_its_branch(self):
+        from .admin import CategoryAdminForm
+
+        html = CategoryAdminForm(instance=self.root)['parent'].as_widget()
+        tree = json.loads(unescape(html.split("data-tree='")[1].split("'\n")[0]))
+
+        self.assertNotIn(str(self.root.pk), tree)
+        self.assertNotIn(str(self.grandchild.pk), tree)
+
+    def test_series_is_gone(self):
+        from django.apps import apps
+
+        with self.assertRaises(LookupError):
+            apps.get_model('store', 'Series')
+        self.assertFalse(
+            any(f.name == 'series' for f in Product._meta.get_fields()))

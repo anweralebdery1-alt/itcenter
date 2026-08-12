@@ -119,7 +119,7 @@ def _otp_wait_seconds(phone):
         if oldest:
             hourly = int(3600 - (now - oldest.created_at).total_seconds()) + 1
     return max(0, cooldown, hourly)
-from django.db.models import Avg, Count, F, Prefetch, Q, Sum
+from django.db.models import Avg, Count, F, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
@@ -204,19 +204,40 @@ def _cart_items(request):
     return items, total
 
 
+def category_tree():
+    """شجرة التصنيفات المفعّلة كاملةً بأي عمق — مصدر واحد لكل قوائم الموقع.
+
+    استعلام واحد ثم بناء الشجرة في الذاكرة، فلا فرق في الكلفة بين مستويين
+    وخمسة. كل عقدة تحمل `subs` (أبناؤها) و`flat_subs` (كل ما تحتها مسطّحاً
+    مع عمقه) لتستعملها القوائم المنسدلة.
+    """
+    nodes = list(Category.objects.filter(is_active=True).order_by('order', 'name'))
+    by_parent = {}
+    for node in nodes:
+        by_parent.setdefault(node.parent_id, []).append(node)
+
+    def build(parent_id, depth):
+        branch = []
+        for node in by_parent.get(parent_id, []):
+            node.depth = depth
+            node.subs = build(node.pk, depth + 1)
+            node.flat_subs = []
+            for child in node.subs:
+                node.flat_subs.append(child)
+                node.flat_subs.extend(child.flat_subs)
+            branch.append(node)
+        return branch
+
+    return build(None, 0)
+
+
 def _base_context(request):
     return {
         'settings': _settings(),
         'cart_count': _cart_count(request),
-        # التصنيفات الرئيسية فقط (مع أبنائها) لعرضها في شريط التصنيفات
-        'categories': (
-            Category.objects
-            .filter(parent__isnull=True, is_active=True)
-            .order_by('order', 'name')
-            .prefetch_related(
-                Prefetch('children', queryset=Category.objects.filter(is_active=True).order_by('order', 'name'))
-            )
-        ),
+        # التصنيفات: الجذور ومعها أبناؤها مهما تعمّقت — تُستعمل في قائمة
+        # الثلاث خطوط وفي شريط تصفية المنتجات معاً
+        'categories': category_tree(),
         'sections': SiteSection.objects.filter(is_active=True),
     }
 
@@ -247,16 +268,15 @@ def home(request):
     search = request.GET.get('search', '').strip()
     category_id = request.GET.get('category', '').strip()
     sort = request.GET.get('sort', 'featured')
-    products_qs = Product.objects.visible().select_related('category', 'series')
+    products_qs = Product.objects.visible().select_related('category')
 
     if search:
         products_qs = products_qs.filter(Q(name__icontains=search) | Q(sku__icontains=search) | Q(description__icontains=search))
     if category_id:
-        # عند اختيار تصنيف رئيسي نعرض منتجاته ومنتجات تصنيفاته الفرعية أيضاً
+        # اختيار تصنيف يعرض منتجاته ومنتجات كل ما تحته مهما تعمّقت الفروع
         selected_cat = Category.objects.filter(id=category_id).first()
         if selected_cat:
-            child_ids = list(selected_cat.children.values_list('id', flat=True))
-            products_qs = products_qs.filter(category_id__in=[selected_cat.id] + child_ids)
+            products_qs = products_qs.filter(category_id__in=selected_cat.descendant_ids())
         else:
             products_qs = products_qs.filter(category_id=category_id)
 
@@ -317,10 +337,13 @@ def product_detail(request, pk):
     )
     _remember_product(request, product.id)
     Product.objects.filter(pk=product.pk).update(views_count=F('views_count') + 1)
-    if product.series:
-        similar = Product.objects.visible().filter(series=product.series).exclude(pk=product.pk)[:6]
-    elif product.category:
-        similar = Product.objects.visible().filter(category=product.category).exclude(pk=product.pk)[:6]
+    if product.category:
+        # المشابه: إخوته في التصنيف نفسه، ثم أبناء عمومته تحت الأب إن قلّوا
+        family = [product.category_id]
+        if product.category.parent_id:
+            family = product.category.parent.descendant_ids()
+        similar = Product.objects.visible().filter(
+            category_id__in=family).exclude(pk=product.pk)[:6]
     else:
         similar = Product.objects.visible().exclude(pk=product.pk).order_by('-created_at')[:6]
     reviews = product.reviews.filter(is_approved=True)
