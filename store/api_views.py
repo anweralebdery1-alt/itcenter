@@ -1,108 +1,27 @@
-import json
-import secrets
-from django.conf import settings
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
-from .models import Order, Product, SaleReservation
-from .serializers import ProductSerializer
+"""واجهة المتجر العامة — قراءة فقط.
+
+المسارات القديمة التي كانت تُعدّل المخزون بالرمز المشترك حُذفت؛ مزامنة نقاط
+البيع كلها في pos_sync.py برمز خاص لكل حاسبة. لا تُضف هنا أي مسار يكتب.
+"""
+
 from django.core.paginator import Paginator
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from django.views.decorators.http import require_GET
 
-PRODUCT_TABLE_NAMES = ('products', 'product', 'store_product')
+from .models import Product
+from .serializers import ProductSerializer
 
-
-def _auth_token(request):
-    header = request.headers.get('Authorization', '')
-    if not header:
-        return ''
-    parts = header.split()
-    if len(parts) == 2 and parts[0].lower() in {'token', 'bearer'}:
-        return parts[1]
-    return parts[-1]
-
-
-def _require_sync_token(request):
-    expected = getattr(settings, 'SYNC_API_TOKEN', '')
-    return bool(expected) and secrets.compare_digest(_auth_token(request), expected)
-
-
-def _invalid_token_response():
-    return JsonResponse({'status': 'error', 'error': 'invalid token'}, status=401)
-
-
-def _as_int(value, default=0):
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return default
-
-
-def _as_float(value, default=0):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _product_payload(data):
-    raw_local = data.get('local_id') or data.get('id') or data.get('pk')
-    try:
-        local_id = int(str(raw_local).strip()) if str(raw_local).strip() != '' and raw_local is not None else None
-    except (TypeError, ValueError):
-        local_id = None
-    raw_sku = str(data.get('sku') or data.get('SKU') or '').strip()
-    # نخزّن SKU الحقيقي كما هو؛ المطابقة تتم عبر local_id لذا يُسمح بتكرار الـSKU
-    sku = raw_sku or (str(local_id) if local_id is not None else '')
-    if local_id is None and not sku:
-        return None, 'missing sku/local_id'
-
-    return {
-        'local_id': local_id,
-        'sku': sku,
-        'name': str(data.get('name') or data.get('title') or 'Unnamed').strip() or 'Unnamed',
-        'description': str(data.get('description') or ''),
-        'buy_price': _as_float(data.get('buy_price'), 0),
-        'sell_price': _as_float(data.get('sell_price', data.get('price')), 0),
-        'quantity': _as_int(data.get('quantity', data.get('qty')), 0),
-    }, None
-
-
-def _upsert_product(data):
-    payload, error = _product_payload(data)
-    if error:
-        return None, error
-    defaults = {
-        'sku': payload['sku'],
-        'name': payload['name'],
-        'description': payload['description'],
-        'buy_price': payload['buy_price'],
-        'sell_price': payload['sell_price'],
-        'quantity': payload['quantity'],
-    }
-    if payload['local_id'] is not None:
-        # المطابقة عبر المعرف المحلي → منتجان بنفس الـSKU يبقيان منفصلين
-        prod, created = Product.objects.update_or_create(
-            local_id=payload['local_id'], defaults=defaults,
-        )
-    else:
-        # لا يوجد معرف محلي (مثلاً منتج أُضيف من لوحة الإدارة) → المطابقة عبر SKU
-        defaults.pop('sku')
-        prod, created = Product.objects.update_or_create(
-            sku=payload['sku'], defaults=defaults,
-        )
-    return {'action': 'insert' if created else 'update', 'sku': prod.sku, 'local_id': prod.local_id, 'quantity': prod.quantity}, None
 
 @require_GET
 def products_list(request):
-    q = request.GET.get('search','').strip()
-    qs = Product.objects.visible().order_by('-created_at')
-    if q:
-        qs = qs.filter(name__icontains=q)
-    tab = request.GET.get('tab','all')
-    if tab == 'offers':
-        qs = qs.filter(is_offer=True)
+    query = request.GET.get('search', '').strip()
+    products = Product.objects.visible().order_by('-created_at')
+    if query:
+        products = products.filter(name__icontains=query)
+    if request.GET.get('tab', 'all') == 'offers':
+        products = products.filter(is_offer=True)
+
     try:
         page = max(1, int(request.GET.get('page', 1)))
     except (TypeError, ValueError):
@@ -112,153 +31,16 @@ def products_list(request):
     except (TypeError, ValueError):
         per = 20
     per = min(max(per, 1), 100)
-    paginator = Paginator(qs, per)
+
+    paginator = Paginator(products, per)
     page_obj = paginator.get_page(page)
-    data = ProductSerializer(page_obj.object_list, many=True).data
-    return JsonResponse({'count': paginator.count, 'results': data})
+    return JsonResponse({
+        'count': paginator.count,
+        'results': ProductSerializer(page_obj.object_list, many=True).data,
+    })
+
 
 @require_GET
 def product_detail_api(request, pk):
-    p = get_object_or_404(Product, pk=pk)
-    return JsonResponse(ProductSerializer(p).data, safe=False)
-
-@csrf_exempt
-@require_POST
-def reserve(request):
-    if not _require_sync_token(request):
-        return _invalid_token_response()
-    try:
-        payload = json.loads(request.body.decode('utf-8'))
-        full_name = payload.get('full_name') or payload.get('name')
-        phone = payload.get('phone')
-        items = payload.get('items', [])
-        total = float(payload.get('total',0))
-        user_id = payload.get('user_id')
-        res = SaleReservation.objects.create(full_name=full_name, phone=phone, items=items, total=total)
-        return JsonResponse({'status':'ok','id': str(res.uuid)})
-    except Exception as e:
-        return JsonResponse({'status':'error','error': str(e)})
-
-@csrf_exempt
-@require_POST
-def sync_push(request):
-    if not _require_sync_token(request):
-        return _invalid_token_response()
-    try:
-        payload = json.loads(request.body.decode('utf-8'))
-        device_id = payload.get('device_id','unknown')
-        changes = payload.get('changes', [])
-        applied = []
-        errors = []
-        for ch in changes:
-            table = ch.get('table')
-            op = ch.get('operation')
-            data = ch.get('data', {})
-            if table in PRODUCT_TABLE_NAMES and op in ('update','insert','upsert'):
-                result, err = _upsert_product(data)
-                if err:
-                    errors.append({'change': ch, 'error': err})
-                else:
-                    applied.append(result)
-            elif table in PRODUCT_TABLE_NAMES and op == 'delete':
-                # الحذف بالـSKU ممنوع: الـSKU يجوز تكراره وحذف واحد كان يمسح مشابهيه.
-                # المزامنة الحديثة تحذف بالـuuid عبر /api/pos/push/.
-                errors.append({'change': ch,
-                               'error': 'delete by sku is disabled — use /api/pos/push/ with a product uuid'})
-            elif table == 'sales' and op=='insert':
-                try:
-                    items = data.get('items', [])
-                    total = float(data.get('total') or 0)
-                    buyer = data.get('buyer') or data.get('full_name') or 'POS'
-                    phone = data.get('phone','')
-                    SaleReservation.objects.create(full_name=buyer, phone=phone, items=items, total=total, status='processed')
-                    applied.append({'action':'sale_insert','buyer':buyer})
-                except Exception as e:
-                    errors.append({'change': ch, 'error': str(e)})
-            else:
-                errors.append({'change': ch, 'error':'unsupported table/op'})
-        return JsonResponse({'status':'ok','applied':applied,'errors':errors})
-    except Exception as e:
-        return JsonResponse({'status':'error','error': str(e)})
-
-@require_GET
-def sync_pull(request):
-    if not _require_sync_token(request):
-        return _invalid_token_response()
-    since = request.GET.get('since')
-    try:
-        qs = Product.objects.visible().order_by('-updated_at')[:100]
-        data = ProductSerializer(qs, many=True).data
-        return JsonResponse({'status':'ok','changes': data})
-    except Exception as e:
-        return JsonResponse({'status':'error','error': str(e)})
-
-
-@require_GET
-def stock_snapshot(request):
-    if not _require_sync_token(request):
-        return _invalid_token_response()
-    data = [
-        {
-            'local_id': p.local_id,
-            'sku': p.sku,
-            'name': p.name,
-            'buy_price': p.buy_price,
-            'sell_price': p.sell_price,
-            'price': p.sell_price,
-            'quantity': p.quantity,
-            'qty': p.quantity,
-            'updated_at': p.updated_at.isoformat(),
-        }
-        for p in Product.objects.visible().order_by('local_id', 'sku')
-    ]
-    return JsonResponse(data, safe=False)
-
-
-@require_GET
-def pending_orders_count(request):
-    if not _require_sync_token(request):
-        return _invalid_token_response()
-    count = Order.objects.filter(status='pending').count()
-    return JsonResponse({'status': 'ok', 'pending_orders': count})
-
-
-@csrf_exempt
-@require_POST
-def stock_update(request):
-    if not _require_sync_token(request):
-        return _invalid_token_response()
-    try:
-        payload = json.loads(request.body.decode('utf-8'))
-        if isinstance(payload, dict):
-            items = payload.get('products') or payload.get('changes') or []
-        else:
-            items = payload
-        applied, errors = [], []
-        for item in items:
-            # حذف فعلي من الموقع عند وصول علامة الحذف (المطابقة عبر local_id أولاً)
-            if isinstance(item, dict) and (item.get('_delete') or item.get('deleted')):
-                # حذف منطقي بالمعرّف المحلي فقط. المسح الفيزيائي أُلغي لأن المنتج
-                # كان يعود عند أول مزامنة من الحاسبة الأخرى، والحذف بالـSKU
-                # كان يمسح كل من يشاركه نفس الرقم.
-                raw_local = item.get('local_id') or item.get('id') or item.get('pk')
-                try:
-                    lid = int(str(raw_local).strip()) if str(raw_local).strip() != '' and raw_local is not None else None
-                except (TypeError, ValueError):
-                    lid = None
-                if lid is None:
-                    errors.append({'item': item,
-                                   'error': 'delete needs local_id — use /api/pos/push/ for uuid deletes'})
-                    continue
-                deleted = Product.objects.filter(local_id=lid, deleted_at__isnull=True).update(
-                    deleted_at=timezone.now())
-                applied.append({'action': 'delete', 'local_id': lid, 'deleted': deleted})
-                continue
-            result, err = _upsert_product(item)
-            if err:
-                errors.append({'item': item, 'error': err})
-            else:
-                applied.append(result)
-        return JsonResponse({'status':'ok','applied':applied,'errors':errors})
-    except Exception as e:
-        return JsonResponse({'status':'error','error': str(e)})
+    product = get_object_or_404(Product.objects.visible(), pk=pk)
+    return JsonResponse(ProductSerializer(product).data, safe=False)

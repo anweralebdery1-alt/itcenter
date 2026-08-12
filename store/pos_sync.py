@@ -23,7 +23,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import AppRelease, PosDevice, PosEvent, Product, StockMove
+from .models import AppRelease, Order, PosDevice, PosEvent, Product, StockMove
 
 
 logger = logging.getLogger(__name__)
@@ -340,6 +340,19 @@ def pos_version(request):
             'notes': latest.notes,
             'mandatory': latest.is_mandatory,
         },
+    })
+
+
+@require_GET
+def pos_orders_count(request):
+    """عدد طلبات الموقع المعلّقة — لشارة التنبيه في البرنامج."""
+    device, error = _authenticate(request)
+    if error:
+        return error
+    _touch(device)
+    return JsonResponse({
+        'status': 'ok',
+        'pending_orders': Order.objects.filter(status='pending').count(),
     })
 
 

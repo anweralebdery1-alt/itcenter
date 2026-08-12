@@ -128,11 +128,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
 }
 
-SYNC_API_TOKEN = os.environ.get("SYNC_API_TOKEN")
-if DEBUG and not SYNC_API_TOKEN:
-    SYNC_API_TOKEN = "dev-sync-token"
-if not SYNC_API_TOKEN or (not DEBUG and SYNC_API_TOKEN in {"changeme_token", "dev-sync-token"}):
-    raise ImproperlyConfigured("Set a strong SYNC_API_TOKEN environment variable before production deploy.")
+# الرمز المشترك القديم لم يعد يحمي أي مسار — لكل حاسبة رمزها الخاص في PosDevice.
+# يبقى القراءة منه للتوافق فقط، ويمكن حذفه من ملف البيئة بأمان.
+SYNC_API_TOKEN = os.environ.get("SYNC_API_TOKEN", "")
 
 OTPIQ_API_URL = os.environ.get("OTPIQ_API_URL", "https://api.otpiq.com/api/sms")
 OTPIQ_API_KEY = os.environ.get("OTPIQ_API_KEY", "")

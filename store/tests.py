@@ -349,3 +349,48 @@ class PosSyncTests(TestCase):
         recompute_product_quantity(str(product.uuid))
         product.refresh_from_db()
         self.assertEqual(product.quantity, 12)
+
+
+class LegacyEndpointsClosedTests(TestCase):
+    """المسارات القديمة كانت محميّة برمز مشترك وُزّع داخل المُثبِّتات، وكانت
+    تكشف أسعار الشراء وتسمح بتعديل المخزون. يجب أن تبقى مغلقة إلى الأبد."""
+
+    CLOSED = [
+        ('get', '/api/stock_snapshot/'),
+        ('post', '/api/stock_update/'),
+        ('post', '/api/sync/push/'),
+        ('get', '/api/sync/pull/'),
+        ('post', '/api/reserve/'),
+    ]
+
+    def test_legacy_write_endpoints_no_longer_exist(self):
+        for method, path in self.CLOSED:
+            response = getattr(self.client, method)(
+                path, HTTP_AUTHORIZATION='Token any-old-shared-token')
+            self.assertEqual(
+                response.status_code, 404,
+                f'{path} ما زال موجوداً — يجب حذفه لا حراسته')
+
+    def test_public_product_api_hides_purchase_price(self):
+        from .models import Product
+        Product.objects.create(name='منتج', sku='1', buy_price=7500,
+                               sell_price=10500, quantity=3)
+        body = self.client.get('/api/products/').content.decode()
+        self.assertIn('10500', body)
+        self.assertNotIn('7500', body)      # سعر الشراء لا يخرج للعلن
+
+    def test_orders_count_requires_a_device_token(self):
+        import secrets
+
+        from .models import PosDevice
+        self.assertEqual(self.client.get('/api/pos/orders_count/').status_code, 401)
+        self.assertEqual(
+            self.client.get('/api/pos/orders_count/',
+                            HTTP_AUTHORIZATION='Token wrong').status_code, 401)
+
+        device = PosDevice.objects.create(device_id='d', name='حاسبة',
+                                          token=secrets.token_hex(16))
+        response = self.client.get('/api/pos/orders_count/',
+                                   HTTP_AUTHORIZATION=f'Token {device.token}')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('pending_orders', response.json())
