@@ -595,6 +595,7 @@ class PosEvent(models.Model):
     op = models.CharField(max_length=10)
     payload = models.JSONField(default=dict)
     device_id = models.CharField(max_length=64, db_index=True)
+    user_name = models.CharField(max_length=100, blank=True, verbose_name='المستخدم')
     created_at = models.CharField(max_length=40)
     received_at = models.DateTimeField(auto_now_add=True)
 

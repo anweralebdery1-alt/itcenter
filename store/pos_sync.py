@@ -222,6 +222,7 @@ def pos_push(request):
                     op=op,
                     payload=payload,
                     device_id=device.device_id,
+                    user_name=str(item.get('user_name') or '')[:100],
                     created_at=_parse_ts(item.get('created_at')),
                 )
                 _materialize(event)
@@ -275,6 +276,7 @@ def pos_pull(request):
                 'op': event.op,
                 'payload': event.payload,
                 'device_id': event.device_id,
+                'user_name': event.user_name,
                 'created_at': event.created_at,
             }
             for event in outgoing

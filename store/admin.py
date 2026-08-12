@@ -351,8 +351,9 @@ class StockMoveAdmin(admin.ModelAdmin):
 
 @admin.register(PosEvent)
 class PosEventAdmin(admin.ModelAdmin):
-    list_display = ('seq', 'entity', 'op', 'entity_uuid', 'device_id', 'created_at', 'received_at')
-    list_filter = ('entity', 'op', 'device_id')
+    list_display = ('seq', 'entity', 'op', 'user_name', 'entity_uuid', 'device_id',
+                    'created_at', 'received_at')
+    list_filter = ('entity', 'op', 'device_id', 'user_name')
     search_fields = ('uuid', 'entity_uuid')
     readonly_fields = tuple(field.name for field in PosEvent._meta.fields)
 
