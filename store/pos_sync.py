@@ -79,6 +79,9 @@ def _apply_product(payload):
     incoming_ts = _parse_ts(payload.get('updated_at'))
     product = Product.objects.filter(uuid=product_uuid).first()
 
+    if product is None:
+        product = _adopt_legacy_product(payload, product_uuid)
+
     if product and product.pos_updated_at and incoming_ts:
         if incoming_ts < product.pos_updated_at:
             return 'ignored: older than stored version'
@@ -106,6 +109,35 @@ def _apply_product(payload):
 
     Product.objects.create(uuid=product_uuid, quantity=0, **fields)
     return 'created'
+
+
+def _adopt_legacy_product(payload, product_uuid):
+    """يتبنّى منتجاً قديماً بدل إنشاء نسخة ثانية منه.
+
+    المزامنة القديمة كانت تطابق بـlocal_id، والحديثة تطابق بـuuid. فمنتج
+    وصل قديماً ثم عاد بمعرّف جديد كان يُنشئ صفاً ثانياً — ويضيع معه ما أضافه
+    المالك من صورة ووصف وتصنيف.
+
+    نتبنّاه بشرطين معاً حتى لا نخلط بين منتجين:
+    - مطابقة تامة للاسم والـSKU.
+    - وجود مرشّح واحد فقط لم تلمسه المزامنة الحديثة من قبل.
+    """
+    name = str(payload.get('name') or '').strip()
+    sku = str(payload.get('sku') or '').strip()
+    if not name:
+        return None
+
+    candidates = list(Product.objects.filter(
+        name=name, sku=sku, deleted_at__isnull=True, pos_updated_at=''
+    )[:2])
+    if len(candidates) != 1:
+        return None          # صفر أو أكثر من واحد → لا نخمّن
+
+    adopted = candidates[0]
+    adopted.uuid = product_uuid
+    adopted.save(update_fields=['uuid'])
+    logger.info('adopted legacy product %s as %s', adopted.pk, product_uuid)
+    return adopted
 
 
 def _apply_product_delete(payload):
