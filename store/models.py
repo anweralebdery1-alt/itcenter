@@ -226,6 +226,10 @@ class Product(ImageCompressMixin, models.Model):
         default=False, verbose_name='يحتاج انتباهاً',
         help_text='لم يُحدَّد اسمه/سعره بثقة — راجعه أولاً.')
     review_note = models.CharField(max_length=300, blank=True, verbose_name='ملاحظة المراجعة')
+    legacy_name = models.CharField(
+        max_length=300, blank=True, editable=False,
+        verbose_name='الاسم الأصلي (قبل التعديل)',
+        help_text='الاسم كما أُدخل يدوياً في نقطة البيع قبل التسمية التلقائية — للأرشفة والمقارنة.')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

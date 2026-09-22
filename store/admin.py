@@ -535,7 +535,7 @@ class ProductAdmin(admin.ModelAdmin):
     def get_ordering(self, request):
         # الترتيب الافتراضي حسب SKU رقمياً (يعتمد تعليق sku_pad في get_queryset)
         return ['sku_pad']
-    readonly_fields = ('uuid', 'views_count', 'created_at', 'updated_at')
+    readonly_fields = ('legacy_name', 'uuid', 'views_count', 'created_at', 'updated_at')
     actions = ('mark_featured', 'unmark_featured', 'clear_review_flags')
     fieldsets = (
         ('صور المنتج', {
@@ -551,7 +551,7 @@ class ProductAdmin(admin.ModelAdmin):
             'description': 'سعر المنافس = معدّل أوروك/أردنك. لوحة القائمة تلوّن الفرق بينه وبين سعر بيعك.',
         }),
         ('المراجعة والملء التلقائي', {
-            'fields': ('auto_filled', 'needs_review', 'review_note'),
+            'fields': ('legacy_name', 'auto_filled', 'needs_review', 'review_note'),
             'description': 'المنتجات المملوءة تلقائياً مُعلَّمة هنا. من قائمة المنتجات صفِّ بـ«مملوء تلقائياً» '
                            'أو «يحتاج انتباهاً» لمراجعة الدفعة، وبعد التأكد أزِل العلامتين.',
         }),
