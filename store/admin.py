@@ -4,7 +4,7 @@ import secrets
 from django import forms
 from django.contrib import admin
 from django.core.exceptions import ValidationError
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
@@ -476,20 +476,43 @@ class ProductAdminForm(forms.ModelForm):
             ProductImage.objects.create(product=product, image=upload, position=position)
 
 
+class HasImageFilter(admin.SimpleListFilter):
+    title = 'الصورة'
+    parameter_name = 'has_image'
+
+    def lookups(self, request, model_admin):
+        return (('no', 'بلا صورة'), ('yes', 'لها صورة'))
+
+    def queryset(self, request, queryset):
+        if self.value() == 'no':
+            return queryset.filter(Q(image='') | Q(image__isnull=True))
+        if self.value() == 'yes':
+            return queryset.exclude(Q(image='') | Q(image__isnull=True))
+        return queryset
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
+
+    @admin.display(description='صورة')
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="height:46px;width:46px;object-fit:cover;'
+                'border-radius:4px;border:1px solid #ddd" />', obj.image.url)
+        return format_html('<span style="color:#c62828;font-size:11px">بلا صورة</span>')
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         form.apply_images(obj)
 
-    list_display = ('name', 'sku', 'buy_price', 'sell_price', 'competitor_price',
+    list_display = ('image_preview', 'name', 'sku', 'buy_price', 'sell_price', 'competitor_price',
                     'price_flag', 'review_flag', 'quantity', 'category',
                     'is_featured', 'is_offer', 'updated_at')
     list_editable = ('sell_price', 'competitor_price', 'quantity', 'is_featured', 'is_offer')
     search_fields = ('name', 'sku', 'description')
-    list_filter = ('auto_filled', 'needs_review', 'is_featured', 'category', 'is_offer')
+    list_filter = ('auto_filled', 'needs_review', HasImageFilter, 'is_featured', 'category', 'is_offer')
     ordering = ('-is_featured', 'featured_priority', '-updated_at')
     readonly_fields = ('uuid', 'views_count', 'created_at', 'updated_at')
     actions = ('mark_featured', 'unmark_featured', 'clear_review_flags')
