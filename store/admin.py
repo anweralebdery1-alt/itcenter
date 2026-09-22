@@ -499,9 +499,13 @@ class ProductAdmin(admin.ModelAdmin):
     change_list_template = 'admin/store/product/change_list.html'
 
     def get_queryset(self, request):
-        # ترتيب رقمي صحيح للـSKU (بحشو الأصفار: '8' -> '000000000008')
-        qs = super().get_queryset(request)
-        return qs.annotate(sku_pad=LPad('sku', 12, Value('0')))
+        # نضيف تعليق sku_pad أولاً ثم نرتّب — وإلا رتّب الأساس قبل وجود التعليق.
+        qs = self.model._default_manager.get_queryset().annotate(
+            sku_pad=LPad('sku', 12, Value('0')))
+        ordering = self.get_ordering(request)
+        if ordering:
+            qs = qs.order_by(*ordering)
+        return qs
 
     @admin.display(description='SKU', ordering='sku_pad')
     def sku_col(self, obj):
