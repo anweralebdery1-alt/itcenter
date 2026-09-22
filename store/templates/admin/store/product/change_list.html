@@ -12,6 +12,16 @@
   #changelist #changelist-form .actions { margin-right: 0 !important; margin-left: 0 !important; }
   #changelist { display: block !important; }
 
+  /* تضييق حقول الإدخال القابلة للتعديل لتفادي التمرير الجانبي */
+  #result_list td input[type="number"],
+  #result_list td input[type="text"] {
+    width: 78px !important; min-width: 0 !important; box-sizing: border-box;
+    padding: 3px 4px !important;
+  }
+  #result_list td select { max-width: 120px; }
+  /* تقليل الحشو الأفقي للخلايا */
+  #result_list td, #result_list th { padding-left: 6px !important; padding-right: 6px !important; }
+
   /* شريط دليل الألوان + القوائم السريعة */
   .price-legend {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
