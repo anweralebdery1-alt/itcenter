@@ -4,7 +4,8 @@ import secrets
 from django import forms
 from django.contrib import admin
 from django.core.exceptions import ValidationError
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Value
+from django.db.models.functions import LPad
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
@@ -494,6 +495,17 @@ class HasImageFilter(admin.SimpleListFilter):
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
+    # قالب مخصّص: يُخفي الفلتر الجانبي ويضيف شريط دليل الألوان في الأعلى
+    change_list_template = 'admin/store/product/change_list.html'
+
+    def get_queryset(self, request):
+        # ترتيب رقمي صحيح للـSKU (بحشو الأصفار: '8' -> '000000000008')
+        qs = super().get_queryset(request)
+        return qs.annotate(sku_pad=LPad('sku', 12, Value('0')))
+
+    @admin.display(description='SKU', ordering='sku_pad')
+    def sku_col(self, obj):
+        return obj.sku
 
     @admin.display(description='صورة')
     def image_preview(self, obj):
@@ -507,13 +519,18 @@ class ProductAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         form.apply_images(obj)
 
-    list_display = ('image_preview', 'name', 'sku', 'buy_price', 'sell_price', 'competitor_price',
+    list_display = ('image_preview', 'name', 'sku_col', 'buy_price', 'sell_price', 'competitor_price',
                     'price_flag', 'review_flag', 'quantity', 'category',
                     'is_featured', 'is_offer', 'updated_at')
     list_editable = ('sell_price', 'competitor_price', 'quantity', 'is_featured', 'is_offer')
     search_fields = ('name', 'sku', 'description')
+    # الفلاتر تبقى مسجّلة (لتعمل روابط القوائم السريعة في الشريط العلوي)،
+    # لكن القالب المخصّص يُخفي شريطها الجانبي لتوسيع مساحة الجدول.
     list_filter = ('auto_filled', 'needs_review', HasImageFilter, 'is_featured', 'category', 'is_offer')
-    ordering = ('-is_featured', 'featured_priority', '-updated_at')
+
+    def get_ordering(self, request):
+        # الترتيب الافتراضي حسب SKU رقمياً (يعتمد تعليق sku_pad في get_queryset)
+        return ['sku_pad']
     readonly_fields = ('uuid', 'views_count', 'created_at', 'updated_at')
     actions = ('mark_featured', 'unmark_featured', 'clear_review_flags')
     fieldsets = (

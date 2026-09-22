@@ -1,0 +1,52 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block extrastyle %}{{ block.super }}
+<style>
+  /* إخفاء الفلتر الجانبي وتوسيع الجدول ليأخذ كامل العرض */
+  #changelist-filter,
+  #changelist-filter-clear,
+  #changelist .xfull #toolbar + #changelist-filter { display: none !important; }
+  #changelist .results,
+  #changelist .paginator,
+  #changelist #changelist-form .actions { margin-right: 0 !important; margin-left: 0 !important; }
+  #changelist { display: block !important; }
+
+  /* شريط دليل الألوان + القوائم السريعة */
+  .price-legend {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin: 6px 0 12px; padding: 8px 12px;
+    background: #f5f7fa; border: 1px solid #e2e6ea; border-radius: 6px;
+    font-size: 12px; line-height: 1.9;
+  }
+  .price-legend .chip {
+    color: #fff; padding: 2px 8px; border-radius: 4px; white-space: nowrap;
+  }
+  .price-legend .sep { color: #999; margin: 0 4px; }
+  .price-legend a.qf {
+    text-decoration: none; padding: 3px 10px; border: 1px solid #cfd6dd;
+    border-radius: 4px; background: #fff; color: #2b3a4a; white-space: nowrap;
+  }
+  .price-legend a.qf:hover { background: #eef3f8; }
+</style>
+{% endblock %}
+
+{% block result_list %}
+<div class="price-legend">
+  <b>دليل الألوان (سعر بيعك مقابل المنافس):</b>
+  <span class="chip" style="background:#b71c1c">أعلى بكثير +٣٠٪</span>
+  <span class="chip" style="background:#ef6c00">أعلى +١٠٪</span>
+  <span class="chip" style="background:#2e7d32">ضمن النطاق</span>
+  <span class="chip" style="background:#00838f">أقل −١٠٪</span>
+  <span class="chip" style="background:#0d47a1">أقل بكثير −٣٠٪</span>
+  <span class="sep">|</span>
+  <b>قوائم سريعة:</b>
+  <a class="qf" href="?">الكل</a>
+  <a class="qf" href="?auto_filled__exact=1">مملوء تلقائياً</a>
+  <a class="qf" href="?needs_review__exact=1">يحتاج انتباهاً</a>
+  <a class="qf" href="?has_image=no">بلا صورة</a>
+  <a class="qf" href="?o=3">ترتيب حسب SKU ↑</a>
+  <a class="qf" href="?o=-3">SKU ↓</a>
+</div>
+{{ block.super }}
+{% endblock %}
