@@ -215,6 +215,17 @@ class Product(ImageCompressMixin, models.Model):
     featured_priority = models.IntegerField(default=0, blank=True, verbose_name='أولوية الظهور',
                                             help_text='الأعلى يظهر أولاً بين المنتجات المميّزة')
     views_count = models.PositiveIntegerField(default=0, verbose_name='عدد المشاهدات')
+    # حقول المراجعة والمقارنة — يديرها الموقع وحده، والمزامنة لا تلمسها إطلاقاً.
+    competitor_price = models.FloatField(
+        null=True, blank=True, verbose_name='سعر المنافس',
+        help_text='معدّل سعر المنافسين (أوروك/أردنك). تقارن به لوحة الأسعار بالألوان. فارغ = لا مقارنة.')
+    auto_filled = models.BooleanField(
+        default=False, verbose_name='مملوء تلقائياً',
+        help_text='مُلئ اسمه/سعره تلقائياً ويحتاج مراجعتك. صفِّ القائمة بهذا الحقل لمراجعة الدفعة.')
+    needs_review = models.BooleanField(
+        default=False, verbose_name='يحتاج انتباهاً',
+        help_text='لم يُحدَّد اسمه/سعره بثقة — راجعه أولاً.')
+    review_note = models.CharField(max_length=300, blank=True, verbose_name='ملاحظة المراجعة')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

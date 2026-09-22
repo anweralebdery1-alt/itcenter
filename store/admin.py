@@ -1,4 +1,5 @@
 import json
+import secrets
 
 from django import forms
 from django.contrib import admin
@@ -483,14 +484,15 @@ class ProductAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         form.apply_images(obj)
 
-    list_display = ('name', 'sku', 'sell_price', 'quantity', 'category',
-                    'is_featured', 'featured_priority', 'is_offer', 'views_count', 'updated_at')
-    list_editable = ('sell_price', 'quantity', 'is_featured', 'featured_priority', 'is_offer')
+    list_display = ('name', 'sku', 'buy_price', 'sell_price', 'competitor_price',
+                    'price_flag', 'review_flag', 'quantity', 'category',
+                    'is_featured', 'is_offer', 'updated_at')
+    list_editable = ('sell_price', 'competitor_price', 'quantity', 'is_featured', 'is_offer')
     search_fields = ('name', 'sku', 'description')
-    list_filter = ('is_featured', 'category', 'is_offer')
+    list_filter = ('auto_filled', 'needs_review', 'is_featured', 'category', 'is_offer')
     ordering = ('-is_featured', 'featured_priority', '-updated_at')
     readonly_fields = ('uuid', 'views_count', 'created_at', 'updated_at')
-    actions = ('mark_featured', 'unmark_featured')
+    actions = ('mark_featured', 'unmark_featured', 'clear_review_flags')
     fieldsets = (
         ('صور المنتج', {
             'fields': ('product_images',),
@@ -500,7 +502,15 @@ class ProductAdmin(admin.ModelAdmin):
         ('بيانات المنتج', {
             'fields': ('name', 'sku', 'description', 'specifications_text'),
         }),
-        ('الأسعار والمخزون', {'fields': ('buy_price', 'sell_price', 'quantity', 'is_offer')}),
+        ('الأسعار والمخزون', {
+            'fields': ('buy_price', 'sell_price', 'competitor_price', 'quantity', 'is_offer'),
+            'description': 'سعر المنافس = معدّل أوروك/أردنك. لوحة القائمة تلوّن الفرق بينه وبين سعر بيعك.',
+        }),
+        ('المراجعة والملء التلقائي', {
+            'fields': ('auto_filled', 'needs_review', 'review_note'),
+            'description': 'المنتجات المملوءة تلقائياً مُعلَّمة هنا. من قائمة المنتجات صفِّ بـ«مملوء تلقائياً» '
+                           'أو «يحتاج انتباهاً» لمراجعة الدفعة، وبعد التأكد أزِل العلامتين.',
+        }),
         ('الإبراز وأولوية الظهور', {
             'fields': ('is_featured', 'featured_priority'),
             'description': 'فعّل «منتج مميّز» ليظهر أولاً في الصفحة الرئيسية. الأولوية الأعلى تظهر قبل غيرها.',
@@ -508,6 +518,45 @@ class ProductAdmin(admin.ModelAdmin):
         ('التنظيم', {'fields': ('category',)}),
         ('معلومات النظام', {'fields': ('uuid', 'views_count', 'created_at', 'updated_at')}),
     )
+
+    @staticmethod
+    def _badge(bg, text, fg='#fff'):
+        return format_html(
+            '<span style="background:{};color:{};padding:2px 6px;border-radius:4px;'
+            'white-space:nowrap;font-size:11px">{}</span>', bg, fg, text)
+
+    @admin.display(description='مقارنة السعر')
+    def price_flag(self, obj):
+        cp = obj.competitor_price or 0
+        sp = obj.sell_price or 0
+        if cp <= 0:
+            return format_html('<span style="color:#999">—</span>')
+        if sp <= 0:
+            return format_html('<span style="color:#999">بلا سعر بيع</span>')
+        diff = (sp - cp) / cp
+        pct = round(diff * 100)
+        if diff >= 0.30:
+            return self._badge('#b71c1c', f'أعلى بكثير +{pct}%')
+        if diff <= -0.30:
+            return self._badge('#0d47a1', f'أقل بكثير {pct}%')
+        if diff >= 0.10:
+            return self._badge('#ef6c00', f'أعلى +{pct}%')
+        if diff <= -0.10:
+            return self._badge('#00838f', f'أقل {pct}%')
+        return self._badge('#2e7d32', f'ضمن النطاق {pct:+d}%')
+
+    @admin.display(description='مراجعة')
+    def review_flag(self, obj):
+        if obj.needs_review:
+            return self._badge('#ff5252', 'راجعني')
+        if obj.auto_filled:
+            return self._badge('#ffca28', 'تلقائي', fg='#000')
+        return ''
+
+    @admin.action(description='إزالة علامة المراجعة/الملء التلقائي عن المحدد')
+    def clear_review_flags(self, request, queryset):
+        updated = queryset.update(auto_filled=False, needs_review=False)
+        self.message_user(request, f'تم اعتماد {updated} منتجاً وإزالة علاماتها.')
 
     @admin.action(description='تمييز المنتجات المحددة (إبراز)')
     def mark_featured(self, request, queryset):
@@ -626,12 +675,44 @@ class AppReleaseAdmin(admin.ModelAdmin):
         return f'{(obj.size_bytes or 0) / 1048576:.1f} MB'
 
 
+class PosDeviceAdminForm(forms.ModelForm):
+    """معرّف الجهاز اختياري في اللوحة — يُولَّد تلقائياً إن تُرك فارغاً."""
+    class Meta:
+        model = PosDevice
+        fields = ('name', 'device_id', 'is_active')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['device_id'].required = False
+        self.fields['device_id'].help_text = (
+            'اتركه فارغاً ليُولَّد تلقائياً. يميّز هذه الحاسبة عن غيرها في المزامنة.')
+
+
 @admin.register(PosDevice)
 class PosDeviceAdmin(admin.ModelAdmin):
+    form = PosDeviceAdminForm
     list_display = ('name', 'device_id', 'is_active', 'last_seen', 'created_at')
     list_editable = ('is_active',)
     readonly_fields = ('token', 'last_seen', 'created_at')
     search_fields = ('name', 'device_id')
+
+    def save_model(self, request, obj, form, change):
+        """يولّد رمز اتصال ومعرّف جهاز فريدين عند الإنشاء، ثم يعرض الرمز لينسخه المالك.
+        الرمز حقل للقراءة فقط في اللوحة، فلا يُدخَل يدوياً ولا يُنشأ جهاز بلا رمز."""
+        creating = not change
+        if creating:
+            if not obj.device_id:
+                obj.device_id = secrets.token_hex(16)
+            if not obj.token:
+                obj.token = secrets.token_hex(32)
+        super().save_model(request, obj, form, change)
+        if creating:
+            self.message_user(request, format_html(
+                'تم إنشاء الجهاز «{}». انسخ <b>رمز الاتصال</b> التالي وضعه في حقل '
+                '«رمز الاتصال (٦٤ حرفاً)» بشاشة إعدادات هذه الحاسبة، ثم اضغط «مزامنة الآن»:'
+                '<br><code style="user-select:all;font-size:14px;background:#f5f5f5;'
+                'padding:4px 8px;display:inline-block;margin-top:6px;direction:ltr">{}</code>',
+                obj.name or obj.device_id, obj.token))
 
 
 @admin.register(StockMove)
