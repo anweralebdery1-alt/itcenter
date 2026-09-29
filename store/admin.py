@@ -625,8 +625,8 @@ class ProductReviewAdmin(admin.ModelAdmin):
     list_filter = ('needs_review', 'auto_filled', HasImageFilter, 'category')
     list_display = ('image_preview', 'legacy_name', 'name', 'buy_price', 'ali_link',
                     'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'needs_review')
-    list_display_links = ('legacy_name',)
-    list_editable = ('name', 'buy_price', 'sell_price', 'competitor_price', 'needs_review')
+    list_display_links = ('legacy_name', 'name')
+    list_editable = ('buy_price', 'sell_price', 'competitor_price', 'needs_review')
     actions = ('mark_reviewed',)
 
     def get_queryset(self, request):
