@@ -26,6 +26,7 @@ from .models import (
     PosEvent,
     Product,
     ProductImage,
+    ProductReview,
     PushSubscription,
     StockMove,
     Review,
@@ -547,8 +548,9 @@ class ProductAdmin(admin.ModelAdmin):
             'fields': ('name', 'sku', 'description', 'specifications_text'),
         }),
         ('الأسعار والمخزون', {
-            'fields': ('buy_price', 'sell_price', 'competitor_price', 'quantity', 'is_offer'),
-            'description': 'سعر المنافس = معدّل أوروك/أردنك. لوحة القائمة تلوّن الفرق بينه وبين سعر بيعك.',
+            'fields': ('buy_price', 'aliexpress_url', 'sell_price', 'competitor_price',
+                       'competitor_url', 'quantity', 'is_offer'),
+            'description': 'سعر المنافس = أردنك أو متجر عراقي. لوحة القائمة تلوّن الفرق بينه وبين سعر بيعك.',
         }),
         ('المراجعة والملء التلقائي', {
             'fields': ('legacy_name', 'auto_filled', 'needs_review', 'review_note'),
@@ -611,6 +613,67 @@ class ProductAdmin(admin.ModelAdmin):
     def unmark_featured(self, request, queryset):
         updated = queryset.update(is_featured=False)
         self.message_user(request, f'تم إلغاء تمييز {updated} منتجاً.')
+
+
+@admin.register(ProductReview)
+class ProductReviewAdmin(admin.ModelAdmin):
+    """صفحة مراجعة وتسعير: مقارنة الاسم القديم/الجديد + الصورة + أسعار الشراء/البيع
+    + روابط علي إكسبريس والمنافس، مع تعديل مباشر للاسم والأسعار وزر «تم الفحص»."""
+    change_list_template = 'admin/store/product/change_list.html'
+    list_per_page = 40
+    search_fields = ('name', 'sku', 'legacy_name')
+    list_filter = ('needs_review', 'auto_filled', HasImageFilter, 'category')
+    list_display = ('image_preview', 'legacy_name', 'name', 'buy_price', 'ali_link',
+                    'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'needs_review')
+    list_display_links = ('legacy_name',)
+    list_editable = ('name', 'buy_price', 'sell_price', 'competitor_price', 'needs_review')
+    actions = ('mark_reviewed',)
+
+    def get_queryset(self, request):
+        qs = Product._default_manager.get_queryset().filter(deleted_at__isnull=True).annotate(
+            sku_pad=LPad('sku', 12, Value('0')))
+        return qs.order_by('sku_pad')
+
+    @admin.display(description='صورة')
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html('<img src="{}" style="height:46px;width:46px;object-fit:cover;'
+                               'border-radius:4px;border:1px solid #ddd" />', obj.image.url)
+        return format_html('<span style="color:#c62828;font-size:11px">بلا صورة</span>')
+
+    @admin.display(description='علي إكسبريس')
+    def ali_link(self, obj):
+        if obj.aliexpress_url:
+            return format_html('<a href="{}" target="_blank" rel="noopener">🔗 فتح</a>', obj.aliexpress_url)
+        return format_html('<span style="color:#bbb">—</span>')
+
+    @admin.display(description='المنافس')
+    def comp_link(self, obj):
+        if obj.competitor_url:
+            return format_html('<a href="{}" target="_blank" rel="noopener">🔗 فتح</a>', obj.competitor_url)
+        return format_html('<span style="color:#bbb">—</span>')
+
+    @admin.display(description='مقارنة')
+    def price_flag(self, obj):
+        cp = obj.competitor_price or 0
+        sp = obj.sell_price or 0
+        if cp <= 0 or sp <= 0:
+            return format_html('<span style="color:#999">—</span>')
+        diff = (sp - cp) / cp
+        pct = round(diff * 100)
+        def b(bg, t, fg='#fff'):
+            return format_html('<span style="background:{};color:{};padding:2px 6px;'
+                               'border-radius:4px;font-size:11px;white-space:nowrap">{}</span>', bg, fg, t)
+        if diff >= 0.30: return b('#b71c1c', f'أعلى +{pct}%')
+        if diff <= -0.30: return b('#0d47a1', f'أقل {pct}%')
+        if diff >= 0.10: return b('#ef6c00', f'أعلى +{pct}%')
+        if diff <= -0.10: return b('#00838f', f'أقل {pct}%')
+        return b('#2e7d32', f'{pct:+d}%')
+
+    @admin.action(description='✅ تحديد المحدَّد كـ«تم الفحص» (إزالة العلامة)')
+    def mark_reviewed(self, request, queryset):
+        updated = queryset.update(needs_review=False)
+        self.message_user(request, f'تم اعتماد {updated} منتجاً كمفحوص.')
 
 
 @admin.register(PushSubscription)

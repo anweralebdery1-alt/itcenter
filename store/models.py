@@ -230,6 +230,12 @@ class Product(ImageCompressMixin, models.Model):
         max_length=300, blank=True, editable=False,
         verbose_name='الاسم الأصلي (قبل التعديل)',
         help_text='الاسم كما أُدخل يدوياً في نقطة البيع قبل التسمية التلقائية — للأرشفة والمقارنة.')
+    aliexpress_url = models.URLField(
+        max_length=600, blank=True, verbose_name='رابط علي إكسبريس',
+        help_text='رابط المنتج على علي إكسبريس (مصدر سعر الشراء).')
+    competitor_url = models.URLField(
+        max_length=600, blank=True, verbose_name='رابط المنافس',
+        help_text='رابط المنتج عند أردنك أو أي متجر عراقي (مصدر سعر المقارنة).')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -299,6 +305,15 @@ class Product(ImageCompressMixin, models.Model):
 # أقصى عدد صور للمنتج: الرئيسية + الباقي في المعرض
 MAX_PRODUCT_IMAGES = 10
 MAX_GALLERY_IMAGES = MAX_PRODUCT_IMAGES - 1
+
+
+class ProductReview(Product):
+    """نفس جدول المنتجات — تفتح صفحة إدارة مخصّصة لمراجعة وتسعير المنتجات
+    (مقارنة الاسم القديم/الجديد والصورة وأسعار الشراء/البيع وروابط المصادر)."""
+    class Meta:
+        proxy = True
+        verbose_name = 'مراجعة وتسعير منتج'
+        verbose_name_plural = '⭐ مراجعة وتسعير المنتجات'
 
 
 class ProductImage(ImageCompressMixin, models.Model):
