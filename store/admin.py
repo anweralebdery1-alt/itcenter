@@ -620,7 +620,7 @@ class ProductReviewAdmin(admin.ModelAdmin):
     """صفحة مراجعة وتسعير: مقارنة الاسم القديم/الجديد + الصورة + أسعار الشراء/البيع
     + روابط علي إكسبريس والمنافس، مع تعديل مباشر للاسم والأسعار وزر «تم الفحص»."""
     change_list_template = 'admin/store/productreview/change_list.html'
-    list_per_page = 40
+    list_per_page = 100
     search_fields = ('name', 'sku', 'legacy_name')
     list_filter = ('needs_review', 'auto_filled', HasImageFilter, 'category')
     list_display = ('image_preview', 'legacy_name', 'name', 'buy_price', 'ali_link',
