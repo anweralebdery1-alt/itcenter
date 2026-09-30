@@ -624,10 +624,17 @@ class ProductReviewAdmin(admin.ModelAdmin):
     search_fields = ('name', 'sku', 'legacy_name')
     list_filter = ('reviewed', 'needs_review', 'auto_filled', HasImageFilter, 'category')
     list_display = ('image_preview', 'legacy_name', 'name', 'buy_price', 'ali_link',
-                    'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'reviewed')
+                    'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'reviewed_flag')
     list_display_links = ('legacy_name',)
-    list_editable = ('name', 'buy_price', 'sell_price', 'competitor_price', 'reviewed')
+    list_editable = ('name', 'buy_price', 'sell_price', 'competitor_price')
     actions = ('mark_reviewed',)
+
+    @admin.display(description='الحالة')
+    def reviewed_flag(self, obj):
+        if obj.reviewed:
+            return format_html('<span style="background:#2e7d32;color:#fff;padding:2px 6px;'
+                               'border-radius:4px;font-size:11px;white-space:nowrap">✓ فُحِص</span>')
+        return format_html('<span style="color:#c0392b;font-size:11px">قيد المراجعة</span>')
 
     def get_changelist_form(self, request, **kwargs):
         # الاسم كصندوق نص متعدّد الأسطر يلتف بدل مربّع سطر واحد يُخفي النص
