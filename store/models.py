@@ -226,6 +226,9 @@ class Product(ImageCompressMixin, models.Model):
         default=False, verbose_name='يحتاج انتباهاً',
         help_text='لم يُحدَّد اسمه/سعره بثقة — راجعه أولاً.')
     review_note = models.CharField(max_length=300, blank=True, verbose_name='ملاحظة المراجعة')
+    reviewed = models.BooleanField(
+        default=False, verbose_name='تم الفحص',
+        help_text='أشّره عند مراجعتك للعنصر واعتماده. تأشيره يزيل علامة «يحتاج انتباهاً».')
     legacy_name = models.CharField(
         max_length=300, blank=True, editable=False,
         verbose_name='الاسم الأصلي (قبل التعديل)',

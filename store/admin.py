@@ -622,12 +622,18 @@ class ProductReviewAdmin(admin.ModelAdmin):
     change_list_template = 'admin/store/productreview/change_list.html'
     list_per_page = 100
     search_fields = ('name', 'sku', 'legacy_name')
-    list_filter = ('needs_review', 'auto_filled', HasImageFilter, 'category')
+    list_filter = ('reviewed', 'needs_review', 'auto_filled', HasImageFilter, 'category')
     list_display = ('image_preview', 'legacy_name', 'name', 'buy_price', 'ali_link',
-                    'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'needs_review')
+                    'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'reviewed')
     list_display_links = ('legacy_name', 'name')
-    list_editable = ('buy_price', 'sell_price', 'competitor_price', 'needs_review')
+    list_editable = ('buy_price', 'sell_price', 'competitor_price', 'reviewed')
     actions = ('mark_reviewed',)
+
+    def save_model(self, request, obj, form, change):
+        # تأشير «تم الفحص» يزيل علامة «يحتاج انتباهاً» تلقائياً
+        if obj.reviewed:
+            obj.needs_review = False
+        super().save_model(request, obj, form, change)
 
     def get_queryset(self, request):
         qs = Product._default_manager.get_queryset().filter(deleted_at__isnull=True).annotate(
@@ -670,9 +676,9 @@ class ProductReviewAdmin(admin.ModelAdmin):
         if diff <= -0.10: return b('#00838f', f'أقل {pct}%')
         return b('#2e7d32', f'{pct:+d}%')
 
-    @admin.action(description='✅ تحديد المحدَّد كـ«تم الفحص» (إزالة العلامة)')
+    @admin.action(description='✅ تحديد المحدَّد كـ«تم الفحص»')
     def mark_reviewed(self, request, queryset):
-        updated = queryset.update(needs_review=False)
+        updated = queryset.update(reviewed=True, needs_review=False)
         self.message_user(request, f'تم اعتماد {updated} منتجاً كمفحوص.')
 
 
