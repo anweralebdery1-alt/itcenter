@@ -625,9 +625,15 @@ class ProductReviewAdmin(admin.ModelAdmin):
     list_filter = ('reviewed', 'needs_review', 'auto_filled', HasImageFilter, 'category')
     list_display = ('image_preview', 'legacy_name', 'name', 'buy_price', 'ali_link',
                     'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'reviewed')
-    list_display_links = ('legacy_name', 'name')
-    list_editable = ('buy_price', 'sell_price', 'competitor_price', 'reviewed')
+    list_display_links = ('legacy_name',)
+    list_editable = ('name', 'buy_price', 'sell_price', 'competitor_price', 'reviewed')
     actions = ('mark_reviewed',)
+
+    def get_changelist_form(self, request, **kwargs):
+        # الاسم كصندوق نص متعدّد الأسطر يلتف بدل مربّع سطر واحد يُخفي النص
+        widgets = kwargs.setdefault('widgets', {})
+        widgets['name'] = forms.Textarea(attrs={'rows': 2, 'class': 'review-name-edit'})
+        return super().get_changelist_form(request, **kwargs)
 
     def save_model(self, request, obj, form, change):
         # تأشير «تم الفحص» يزيل علامة «يحتاج انتباهاً» تلقائياً

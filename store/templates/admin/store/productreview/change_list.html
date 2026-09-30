@@ -31,9 +31,14 @@
     width: 120px !important; min-width: 0; box-sizing: border-box;
     font-size: 11px; padding: 2px 3px !important;
   }
-  /* مربّع «الاسم الجديد» أوسع ليظهر الاسم الثنائي كاملاً */
+  /* «الاسم الجديد» صندوق نص متعدّد الأسطر يلتف ولا يُخفي شيئاً */
   #result_list td.field-name { min-width: 250px; }
-  #result_list td.field-name input[type="text"] { width: 250px !important; }
+  #result_list td.field-name textarea,
+  #result_list textarea.review-name-edit {
+    width: 250px !important; min-width: 0; box-sizing: border-box;
+    font-size: 11px; line-height: 1.35; padding: 3px 5px !important;
+    resize: vertical; white-space: normal; overflow: auto;
+  }
   /* عمودا الاسم أوسع قليلاً للقراءة */
   #result_list td.field-legacy_name, #result_list td.field-name { max-width: 220px; }
 
