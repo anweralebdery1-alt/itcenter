@@ -1,6 +1,25 @@
 {% extends "admin/change_list.html" %}
 {% load i18n %}
 
+{% block extrahead %}{{ block.super }}
+<script>
+  /* إجراء «حفظ + تأييد + إظهار» يحفظ الحقول القابلة للتعديل بنفسه على الخادم،
+     لذا نُسكت تحذير Django «لديك تعديلات غير محفوظة…» لهذه الرسالة تحديداً فقط،
+     دون المساس بأي تأكيد آخر (كتأكيد الحذف). */
+  (function () {
+    var orig = window.confirm;
+    window.confirm = function (msg) {
+      var m = String(msg || "");
+      if (m.indexOf("غير محفوظة") !== -1 || m.indexOf("تخسر") !== -1 ||
+          /unsaved/i.test(m)) {
+        return true;
+      }
+      return orig.apply(this, arguments);
+    };
+  })();
+</script>
+{% endblock %}
+
 {% block extrastyle %}{{ block.super }}
 <style>
   /* إخفاء الفلتر الجانبي وتوسيع الجدول */
