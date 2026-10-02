@@ -1,4 +1,5 @@
 import json
+import logging
 import secrets
 
 from django import forms
@@ -35,6 +36,8 @@ from .models import (
     SiteSettings,
     TeamMember,
 )
+
+logger = logging.getLogger(__name__)
 
 admin.site.site_header = 'إدارة المتجر'
 admin.site.site_title = 'إدارة المتجر'
@@ -623,23 +626,27 @@ class ProductReviewAdmin(admin.ModelAdmin):
     list_per_page = 100
     search_fields = ('name', 'sku', 'legacy_name')
     list_filter = ('reviewed', 'needs_review', 'auto_filled', HasImageFilter, 'category')
-    list_display = ('image_preview', 'legacy_name', 'name', 'buy_price', 'ali_link',
+    list_display = ('image_preview', 'legacy_name', 'name', 'buy_price', 'bab_link', 'ali_link',
                     'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'reviewed_flag')
     list_display_links = ('legacy_name',)
     list_editable = ('name', 'buy_price', 'sell_price', 'competitor_price')
-    actions = ('mark_reviewed',)
+    actions = ('save_confirm_show', 'hide_from_site')
 
-    @admin.display(description='الحالة')
+    @admin.display(description='ظاهر للزبائن؟')
     def reviewed_flag(self, obj):
         if obj.reviewed:
             return format_html('<span style="background:#2e7d32;color:#fff;padding:2px 6px;'
-                               'border-radius:4px;font-size:11px;white-space:nowrap">✓ فُحِص</span>')
-        return format_html('<span style="color:#c0392b;font-size:11px">قيد المراجعة</span>')
+                               'border-radius:4px;font-size:11px;white-space:nowrap">✓ ظاهر</span>')
+        return format_html('<span style="background:#9e9e9e;color:#fff;padding:2px 6px;'
+                           'border-radius:4px;font-size:11px;white-space:nowrap">مخفي — قيد المراجعة</span>')
 
     def get_changelist_form(self, request, **kwargs):
-        # الاسم كصندوق نص متعدّد الأسطر يلتف بدل مربّع سطر واحد يُخفي النص
+        # الاسم كصندوق نص متعدّد الأسطر يلتف بدل مربّع سطر واحد يُخفي النص،
+        # مع dir=rtl لضبط تحديد النص العربي عند التعديل
         widgets = kwargs.setdefault('widgets', {})
-        widgets['name'] = forms.Textarea(attrs={'rows': 2, 'class': 'review-name-edit'})
+        widgets['name'] = forms.Textarea(attrs={
+            'rows': 2, 'class': 'review-name-edit', 'dir': 'rtl',
+            'style': 'unicode-bidi:plaintext'})
         return super().get_changelist_form(request, **kwargs)
 
     def save_model(self, request, obj, form, change):
@@ -659,6 +666,12 @@ class ProductReviewAdmin(admin.ModelAdmin):
             return format_html('<img src="{}" style="height:46px;width:46px;object-fit:cover;'
                                'border-radius:4px;border:1px solid #ddd" />', obj.image.url)
         return format_html('<span style="color:#c62828;font-size:11px">بلا صورة</span>')
+
+    @admin.display(description='علي بابا')
+    def bab_link(self, obj):
+        if obj.alibaba_url:
+            return format_html('<a href="{}" target="_blank" rel="noopener">🔗 فتح</a>', obj.alibaba_url)
+        return format_html('<span style="color:#bbb">—</span>')
 
     @admin.display(description='علي إكسبريس')
     def ali_link(self, obj):
@@ -689,10 +702,38 @@ class ProductReviewAdmin(admin.ModelAdmin):
         if diff <= -0.10: return b('#00838f', f'أقل {pct}%')
         return b('#2e7d32', f'{pct:+d}%')
 
-    @admin.action(description='✅ تحديد المحدَّد كـ«تم الفحص»')
-    def mark_reviewed(self, request, queryset):
+    @admin.action(description='✅ حفظ التعديلات + تأييد الفحص + إظهار في الموقع')
+    def save_confirm_show(self, request, queryset):
+        """إجراء واحد: يحفظ تعديلات الاسم/الأسعار المكتوبة في الصفحة، ثم يؤشّر
+        المحدَّد «تم الفحص» فيصبح ظاهراً للزبائن في الموقع."""
+        saved = 0
+        try:
+            FormSet = self.get_changelist_formset(request)
+            prefix = FormSet.get_default_prefix()
+            modified = self._get_list_editable_queryset(request, prefix)
+            formset = FormSet(request.POST, request.FILES, queryset=modified)
+            if formset.is_valid():
+                for form in formset.forms:
+                    if form.has_changed():
+                        obj = self.save_form(request, form, change=True)
+                        self.save_model(request, obj, form, change=True)
+                        saved += 1
+            else:
+                self.message_user(
+                    request,
+                    'تعذّر حفظ بعض التعديلات (قيمة غير صحيحة)؛ تم تأييد الفحص دون حفظ تلك الصفوف.',
+                    level='warning')
+        except Exception:
+            logger.exception('save_confirm_show: formset save failed')
         updated = queryset.update(reviewed=True, needs_review=False)
-        self.message_user(request, f'تم اعتماد {updated} منتجاً كمفحوص.')
+        self.message_user(
+            request,
+            f'حُفظت تعديلات {saved} صفّاً، واعتُمد {updated} منتجاً وأصبح ظاهراً للزبائن في الموقع.')
+
+    @admin.action(description='🚫 إخفاء المحدَّد من الموقع (إلغاء الاعتماد)')
+    def hide_from_site(self, request, queryset):
+        updated = queryset.update(reviewed=False)
+        self.message_user(request, f'أُخفي {updated} منتجاً عن الزبائن (عاد قيد المراجعة).')
 
 
 @admin.register(PushSubscription)

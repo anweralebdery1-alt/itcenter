@@ -183,8 +183,13 @@ class SiteSettings(ImageCompressMixin, models.Model):
 
 class ProductQuerySet(models.QuerySet):
     def visible(self):
-        """المنتجات التي يراها الزبون — تستثني ما حُذف من نقطة البيع."""
+        """المنتجات غير المحذوفة من نقطة البيع (للاستخدام الداخلي والإدارة)."""
         return self.filter(deleted_at__isnull=True)
+
+    def storefront(self):
+        """المنتجات التي يراها الزبون في الموقع: غير محذوفة ومعتمدة يدوياً فقط.
+        أي منتج جديد/غير مفحوص لا يظهر للزبائن حتى تؤشّره «تم الفحص» في صفحة المراجعة."""
+        return self.filter(deleted_at__isnull=True, reviewed=True)
 
 
 class Product(ImageCompressMixin, models.Model):
@@ -233,6 +238,9 @@ class Product(ImageCompressMixin, models.Model):
         max_length=300, blank=True, editable=False,
         verbose_name='الاسم الأصلي (قبل التعديل)',
         help_text='الاسم كما أُدخل يدوياً في نقطة البيع قبل التسمية التلقائية — للأرشفة والمقارنة.')
+    alibaba_url = models.URLField(
+        max_length=600, blank=True, verbose_name='رابط علي بابا',
+        help_text='رابط المنتج على علي بابا (خطة التسعير الثالثة — يُقارَن سعر الجملة).')
     aliexpress_url = models.URLField(
         max_length=600, blank=True, verbose_name='رابط علي إكسبريس',
         help_text='رابط المنتج على علي إكسبريس (مصدر سعر الشراء).')

@@ -28,19 +28,20 @@
     -webkit-appearance: none; margin: 0;
   }
   #result_list td input[type="text"] {
-    width: 120px !important; min-width: 0; box-sizing: border-box;
+    width: 110px !important; min-width: 0; box-sizing: border-box;
     font-size: 11px; padding: 2px 3px !important;
   }
-  /* «الاسم الجديد» صندوق نص متعدّد الأسطر يلتف ولا يُخفي شيئاً */
-  #result_list td.field-name { min-width: 250px; }
+  /* «الاسم الجديد» صندوق نص متعدّد الأسطر يلتف ولا يُخفي شيئاً — أضيق لتوسيع باقي الأعمدة */
+  #result_list td.field-name { min-width: 150px; max-width: 175px; }
   #result_list td.field-name textarea,
   #result_list textarea.review-name-edit {
-    width: 250px !important; min-width: 0; box-sizing: border-box;
+    width: 165px !important; min-width: 0; box-sizing: border-box;
     font-size: 11px; line-height: 1.35; padding: 3px 5px !important;
-    resize: vertical; white-space: normal; overflow: auto;
+    resize: both; white-space: normal; overflow: auto;
+    direction: rtl; unicode-bidi: plaintext; text-align: right;
   }
-  /* عمودا الاسم أوسع قليلاً للقراءة */
-  #result_list td.field-legacy_name, #result_list td.field-name { max-width: 220px; }
+  /* الاسم القديم أضيق أيضاً لتوفير المجال */
+  #result_list td.field-legacy_name { max-width: 150px; font-size: 10.5px; color:#555; }
 
   /* شريط دليل الألوان + القوائم السريعة */
   .price-legend { display:flex; flex-wrap:wrap; gap:8px; align-items:center;

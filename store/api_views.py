@@ -16,7 +16,7 @@ from .serializers import ProductSerializer
 @require_GET
 def products_list(request):
     query = request.GET.get('search', '').strip()
-    products = Product.objects.visible().order_by('-created_at')
+    products = Product.objects.storefront().order_by('-created_at')
     if query:
         products = products.filter(name__icontains=query)
     if request.GET.get('tab', 'all') == 'offers':
@@ -42,5 +42,5 @@ def products_list(request):
 
 @require_GET
 def product_detail_api(request, pk):
-    product = get_object_or_404(Product.objects.visible(), pk=pk)
+    product = get_object_or_404(Product.objects.storefront(), pk=pk)
     return JsonResponse(ProductSerializer(product).data, safe=False)
