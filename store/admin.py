@@ -88,6 +88,12 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         ('واجهة الصفحة الرئيسية', {'fields': ('hero_title', 'hero_subtitle', 'hero_image')}),
         ('ألوان المتجر', {'fields': ('primary_color', 'accent_color')}),
         ('معلومات التواصل', {'fields': ('phone', 'whatsapp', 'address')}),
+        ('التسعير التلقائي', {
+            'fields': ('usd_rate', 'shipping_margin_pct', 'profit_margin_pct'),
+            'description': 'سعر الشراء = السعر الدولاري × سعر الصرف × (1 + هامش الشحن٪). '
+                           'سعر البيع = سعر الشراء × (1 + هامش الربح٪). '
+                           'أي تعديل هنا يُعيد تسعير كل منتج له سعر دولاري فوراً عند الحفظ.',
+        }),
         ('تحسين محركات البحث (SEO)', {
             'fields': ('meta_description', 'meta_keywords', 'google_site_verification'),
             'description': 'إعدادات تساعد على ظهور المتجر في نتائج بحث جوجل بسرعة.',
@@ -524,6 +530,11 @@ class ProductAdmin(admin.ModelAdmin):
         return format_html('<span style="color:#c62828;font-size:11px">بلا صورة</span>')
 
     def save_model(self, request, obj, form, change):
+        # إن حُدِّد سعر دولاري، اشتق سعر الشراء/البيع منه وفق إعدادات الموقع
+        if obj.price_usd:
+            res = obj.compute_prices()
+            if res:
+                obj.buy_price, obj.sell_price = res
         super().save_model(request, obj, form, change)
         form.apply_images(obj)
 
@@ -551,9 +562,11 @@ class ProductAdmin(admin.ModelAdmin):
             'fields': ('name', 'sku', 'description', 'specifications_text'),
         }),
         ('الأسعار والمخزون', {
-            'fields': ('buy_price', 'aliexpress_url', 'sell_price', 'competitor_price',
+            'fields': ('price_usd', 'buy_price', 'aliexpress_url', 'sell_price', 'competitor_price',
                        'competitor_url', 'quantity', 'is_offer'),
-            'description': 'سعر المنافس = أردنك أو متجر عراقي. لوحة القائمة تلوّن الفرق بينه وبين سعر بيعك.',
+            'description': 'اكتب السعر الدولاري فقط ويُحسب الشراء والبيع تلقائياً من سعر الصرف '
+                           'والهوامش في إعدادات الموقع. سعر المنافس = أردنك أو متجر عراقي؛ لوحة '
+                           'القائمة تلوّن الفرق بينه وبين سعر بيعك.',
         }),
         ('المراجعة والملء التلقائي', {
             'fields': ('legacy_name', 'auto_filled', 'needs_review', 'review_note'),
@@ -626,10 +639,10 @@ class ProductReviewAdmin(admin.ModelAdmin):
     list_per_page = 100
     search_fields = ('name', 'sku', 'legacy_name')
     list_filter = ('reviewed', 'needs_review', 'auto_filled', HasImageFilter, 'category')
-    list_display = ('image_preview', 'legacy_name', 'name', 'buy_price', 'bab_link', 'ali_link',
-                    'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'reviewed_flag')
+    list_display = ('image_preview', 'legacy_name', 'name', 'price_usd', 'buy_price', 'bab_link',
+                    'ali_link', 'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'reviewed_flag')
     list_display_links = ('legacy_name',)
-    list_editable = ('name', 'buy_price', 'sell_price', 'competitor_price')
+    list_editable = ('name', 'price_usd', 'buy_price', 'sell_price', 'competitor_price')
     actions = ('save_confirm_show', 'hide_from_site')
 
     @admin.display(description='ظاهر للزبائن؟')
@@ -653,6 +666,11 @@ class ProductReviewAdmin(admin.ModelAdmin):
         # تأشير «تم الفحص» يزيل علامة «يحتاج انتباهاً» تلقائياً
         if obj.reviewed:
             obj.needs_review = False
+        # إن حُدِّد سعر دولاري، اشتق سعر الشراء/البيع منه تلقائياً
+        if obj.price_usd:
+            res = obj.compute_prices()
+            if res:
+                obj.buy_price, obj.sell_price = res
         super().save_model(request, obj, form, change)
 
     def get_queryset(self, request):

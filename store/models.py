@@ -151,6 +151,16 @@ class SiteSettings(ImageCompressMixin, models.Model):
     google_site_verification = models.CharField(
         max_length=200, blank=True, verbose_name='رمز التحقق من Google Search Console',
         help_text='الصق قيمة "content" من وسم التحقق google-site-verification فقط.')
+    # ---- التسعير التلقائي: الأساس دولاري ثم يُضرب بسعر الصرف والهوامش ----
+    usd_rate = models.FloatField(
+        default=1600, verbose_name='سعر صرف الدولار (دينار لكل دولار)',
+        help_text='كم ديناراً يساوي الدولار الواحد. منه يُحوَّل السعر الدولاري إلى سعر الشراء.')
+    shipping_margin_pct = models.FloatField(
+        default=30, verbose_name='هامش الشحن %',
+        help_text='نسبة تُضاف فوق التكلفة الدولارية لتغطية الشحن. مثال: 30 تعني +‏%30.')
+    profit_margin_pct = models.FloatField(
+        default=35, verbose_name='هامش الربح %',
+        help_text='نسبة الربح فوق سعر الشراء لتحديد سعر البيع. مثال: 35 تعني +‏%35.')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -179,6 +189,29 @@ class SiteSettings(ImageCompressMixin, models.Model):
         else:
             d = d[:10]
         return d if d.startswith('964') else '964' + d
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # تغيير سعر الصرف أو الهوامش يعيد تسعير كل منتج له أساس دولاري
+        try:
+            self.reprice_products()
+        except Exception:
+            logger.exception('reprice_products failed after SiteSettings.save')
+
+    def reprice_products(self):
+        """يعيد حساب سعر الشراء والبيع لكل منتج يملك سعراً دولارياً وفق سعر
+        الصرف والهوامش الحالية. يرجع عدد المنتجات التي تغيّرت أسعارها."""
+        products = list(
+            Product.objects.filter(price_usd__isnull=False).exclude(price_usd=0))
+        changed = []
+        for p in products:
+            res = p.compute_prices(self)
+            if res and (p.buy_price, p.sell_price) != res:
+                p.buy_price, p.sell_price = res
+                changed.append(p)
+        if changed:
+            Product.objects.bulk_update(changed, ['buy_price', 'sell_price'])
+        return len(changed)
 
 
 class ProductQuerySet(models.QuerySet):
@@ -211,6 +244,10 @@ class Product(ImageCompressMixin, models.Model):
     image = models.ImageField(upload_to='products/', blank=True, null=True)
     # نسخة مصغّرة خفيفة جداً للعرض في قوائم المنتجات (تُولَّد تلقائياً)
     thumbnail = models.ImageField(upload_to='products/thumbs/', blank=True, null=True, editable=False)
+    price_usd = models.FloatField(
+        null=True, blank=True, verbose_name='السعر الدولاري (المصدر)',
+        help_text='تكلفة المنتج بالدولار من علي إكسبريس/علي بابا. منه يُحسب سعر '
+                  'الشراء والبيع تلقائياً وفق سعر الصرف والهوامش في إعدادات الموقع.')
     buy_price = models.FloatField(default=0)
     sell_price = models.FloatField(default=0)
     quantity = models.IntegerField(default=0)
@@ -288,6 +325,32 @@ class Product(ImageCompressMixin, models.Model):
         base = os.path.splitext(os.path.basename(self.image.name))[0]
         self.thumbnail.save(f"{base}-thumb.{ext}", ContentFile(buffer.read()), save=False)
         super().save(update_fields=['thumbnail'])
+
+    @staticmethod
+    def _round50(x):
+        """تقريب لأقرب 50 ديناراً."""
+        return int(round(x / 50.0)) * 50
+
+    def compute_prices(self, settings=None):
+        """يحسب (سعر الشراء، سعر البيع) من السعر الدولاري وإعدادات الموقع.
+        سعر الشراء = الدولاري × سعر الصرف × (1 + هامش الشحن%)،
+        سعر البيع = سعر الشراء × (1 + هامش الربح%). يرجع None إن لا سعر دولاري."""
+        if not self.price_usd:
+            return None
+        s = settings or SiteSettings.load()
+        buy = self.price_usd * (s.usd_rate or 0) * (1 + (s.shipping_margin_pct or 0) / 100.0)
+        sell = buy * (1 + (s.profit_margin_pct or 0) / 100.0)
+        return self._round50(buy), self._round50(sell)
+
+    def apply_pricing(self, settings=None, save=True):
+        """يشتق سعر الشراء/البيع من السعر الدولاري ويخزّنهما. يرجع True إن طُبّق."""
+        res = self.compute_prices(settings)
+        if not res:
+            return False
+        self.buy_price, self.sell_price = res
+        if save:
+            super().save(update_fields=['buy_price', 'sell_price', 'updated_at'])
+        return True
 
     @property
     def list_image_url(self):
