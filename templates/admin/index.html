@@ -1,0 +1,83 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static "admin/css/dashboard.css" %}">
+<style>
+  #store-dashboard {margin:0 0 18px;}
+  #store-dashboard h2.sd-title{font-size:15px;margin:0 0 10px;color:#1b2838;font-weight:700;}
+  .sd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;}
+  .sd-card{display:block;position:relative;background:#fff;border:1px solid #e6e9ee;border-radius:12px;
+    padding:14px 14px 13px;text-decoration:none;color:inherit;overflow:hidden;
+    box-shadow:0 1px 2px rgba(16,24,40,.04);transition:transform .08s ease,box-shadow .12s ease;}
+  a.sd-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(16,24,40,.10);}
+  .sd-card::before{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:5px;background:var(--sd-c,#0B4EA2);}
+  .sd-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .sd-icon{font-size:18px;line-height:1;}
+  .sd-label{font-size:12.5px;color:#5b6675;font-weight:600;}
+  .sd-value{font-size:23px;font-weight:800;color:var(--sd-c,#0B4EA2);line-height:1.1;letter-spacing:-.3px;}
+  .sd-hint{font-size:11.5px;color:#8a93a3;margin-top:5px;}
+  @media (prefers-color-scheme: dark){
+    .sd-card{background:#1e2329;border-color:#333b44;}
+    #store-dashboard h2.sd-title{color:#e6e9ee;}
+    .sd-label{color:#aeb6c2;}.sd-hint{color:#7f8a99;}
+  }
+</style>
+{% endblock %}
+
+{% block coltype %}colMS{% endblock %}
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+{% block nav-breadcrumbs %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  {% if store_stats %}
+  <div id="store-dashboard" class="module">
+    <h2 class="sd-title">📊 نظرة عامة على المتجر</h2>
+    <div class="sd-grid">
+      {% for c in store_stats %}
+        {% if c.url %}<a class="sd-card" style="--sd-c:{{ c.color }}" href="{% url 'admin:index' %}{{ c.url }}">{% else %}<div class="sd-card" style="--sd-c:{{ c.color }}">{% endif %}
+          <div class="sd-top"><span class="sd-icon">{{ c.icon }}</span><span class="sd-label">{{ c.label }}</span></div>
+          <div class="sd-value">{{ c.value }}</div>
+          <div class="sd-hint">{{ c.hint }}</div>
+        {% if c.url %}</a>{% else %}</div>{% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related">
+    <div class="module" id="recent-actions-module">
+        <h2>{% translate 'Recent actions' %}</h2>
+        <h3>{% translate 'My actions' %}</h3>
+            {% load log %}
+            {% get_admin_log 10 as admin_log for_user user %}
+            {% if not admin_log %}
+            <p>{% translate 'None available' %}</p>
+            {% else %}
+            <ul class="actionlist">
+            {% for entry in admin_log %}
+            <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+                {% if entry.is_deletion or not entry.get_admin_url %}
+                    {{ entry.object_repr }}
+                {% else %}
+                    <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+                {% endif %}
+                <br>
+                {% if entry.content_type %}
+                    <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
+                {% else %}
+                    <span class="mini quiet">{% translate 'Unknown content' %}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+            </ul>
+            {% endif %}
+    </div>
+</div>
+{% endblock %}

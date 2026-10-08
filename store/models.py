@@ -287,6 +287,10 @@ class Product(ImageCompressMixin, models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = 'منتج'
+        verbose_name_plural = '📦 المنتجات'
+
     def process_image_field(self, field_name, field_file):
         if field_name == 'image':
             try:
@@ -481,6 +485,10 @@ class Customer(models.Model):
     address = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        verbose_name = 'زبون'
+        verbose_name_plural = '👥 الزبائن'
+
     def __str__(self):
         return self.full_name or self.phone
 
@@ -490,6 +498,10 @@ class PhoneOTP(models.Model):
     code = models.CharField(max_length=6)
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'رمز تحقق هاتف'
+        verbose_name_plural = 'رموز تحقق الهاتف'
 
     def is_valid(self):
         return not self.is_used and timezone.now() <= self.created_at + timezone.timedelta(minutes=10)
@@ -517,6 +529,11 @@ class Order(models.Model):
     total = models.FloatField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ('-created_at',)
+        verbose_name = 'طلب'
+        verbose_name_plural = '🧾 الطلبات'
+
     def __str__(self):
         return f"Order {self.id} - {self.phone}"
 
@@ -529,6 +546,10 @@ class OrderItem(models.Model):
     price = models.FloatField(default=0)
     quantity = models.IntegerField(default=1)
     line_total = models.FloatField(default=0)
+
+    class Meta:
+        verbose_name = 'عنصر طلب'
+        verbose_name_plural = 'عناصر الطلب'
 
     def __str__(self):
         return self.product_name
@@ -552,6 +573,8 @@ class SiteSection(ImageCompressMixin, models.Model):
 
     class Meta:
         ordering = ['order', 'id']
+        verbose_name = 'قسم في الصفحة الرئيسية'
+        verbose_name_plural = 'أقسام الصفحة الرئيسية'
 
     def __str__(self):
         return self.title
@@ -567,6 +590,10 @@ class Course(ImageCompressMixin, models.Model):
     trainer = models.CharField(max_length=200, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'دورة تدريبية'
+        verbose_name_plural = '🎓 الدورات التدريبية'
 
     def __str__(self):
         return self.title
@@ -592,6 +619,8 @@ class EducationalVideo(ImageCompressMixin, models.Model):
 
     class Meta:
         ordering = ('project_number', 'id')
+        verbose_name = 'فيديو تعليمي'
+        verbose_name_plural = '🎬 الفيديوهات التعليمية'
 
     def __str__(self):
         return self.title
@@ -637,6 +666,10 @@ class DownloadableFile(models.Model):
     is_free = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        verbose_name = 'ملف للتحميل'
+        verbose_name_plural = 'الملفات للتحميل'
+
     def __str__(self):
         return self.title
 
@@ -657,6 +690,8 @@ class TeamMember(ImageCompressMixin, models.Model):
 
     class Meta:
         ordering = ['order', 'id']
+        verbose_name = 'عضو فريق'
+        verbose_name_plural = '👔 فريق العمل'
 
     def __str__(self):
         return self.name
@@ -801,4 +836,10 @@ class SaleReservation(models.Model):
     total = models.FloatField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='reserved')
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+        verbose_name = 'حجز بيع (أونلاين)'
+        verbose_name_plural = 'حجوزات البيع (أونلاين)'
+
     def __str__(self): return f"Reservation {self.uuid} — {self.full_name}"

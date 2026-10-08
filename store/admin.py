@@ -5,7 +5,7 @@ import secrets
 from django import forms
 from django.contrib import admin
 from django.core.exceptions import ValidationError
-from django.db.models import Count, Q, Value
+from django.db.models import Count, F, FloatField, Q, Sum, Value
 from django.db.models.functions import LPad
 from django.http import JsonResponse
 from django.template.loader import render_to_string
@@ -67,18 +67,100 @@ def _badge_count_for_model(object_name):
 
 _default_get_app_list = admin.site.get_app_list
 
+# تصنيف قوائم لوحة التحكم في مجموعات عربية مرتّبة (أسماء كلاسات النماذج)
+_ADMIN_GROUPS = [
+    ('🛒 المنتجات والمخزون', ['Product', 'ProductReview', 'Category', 'StockMove']),
+    ('🧾 المبيعات والزبائن', ['Order', 'SaleReservation', 'Customer']),
+    ('⭐ تفاعل الزبائن', ['Review', 'PushSubscription', 'PhoneOTP']),
+    ('🎓 المحتوى التعليمي', ['Course', 'EducationalVideo', 'DownloadableFile']),
+    ('🎨 واجهة الموقع', ['SiteSettings', 'SiteSection', 'TeamMember']),
+    ('🔄 المزامنة وإصدارات البرنامج', ['PosDevice', 'PosEvent', 'AppRelease']),
+    ('👤 المستخدمون والصلاحيات', ['User', 'Group']),
+]
 
-def _get_app_list_with_badges(request, app_label=None):
+
+def _get_app_list_grouped(request, app_label=None):
+    """يعيد تنظيم قوائم الأدمن في مجموعات عربية مصنّفة بدل تجميعها تحت «Store»."""
     app_list = _default_get_app_list(request, app_label)
+    if app_label is not None:          # صفحة تطبيق واحد: اترك الافتراضي
+        return app_list
+    models_by_name = {}
     for app in app_list:
         for model in app.get('models', []):
             badge = _admin_badge(_badge_count_for_model(model.get('object_name')))
             if badge:
                 model['name'] = format_html('{}{}', model['name'], badge)
-    return app_list
+            models_by_name[model.get('object_name')] = model
+    grouped, used = [], set()
+    for idx, (title, names) in enumerate(_ADMIN_GROUPS):
+        models = [models_by_name[n] for n in names if n in models_by_name]
+        if not models:
+            continue
+        used.update(n for n in names if n in models_by_name)
+        grouped.append({'name': title, 'app_label': f'group_{idx}',
+                        'app_url': '', 'has_module_perms': True, 'models': models})
+    others = [m for n, m in models_by_name.items() if n not in used]
+    if others:
+        grouped.append({'name': '🗂️ أخرى', 'app_label': 'group_other',
+                        'app_url': '', 'has_module_perms': True, 'models': others})
+    return grouped
 
 
-admin.site.get_app_list = _get_app_list_with_badges
+admin.site.get_app_list = _get_app_list_grouped
+
+
+def _fmt_iqd(n):
+    try:
+        return f"{int(round(n or 0)):,}"
+    except Exception:
+        return "0"
+
+
+def _dashboard_stats():
+    """إحصاءات لوحة التحكم التي يحتاجها صاحب المتجر."""
+    P = Product.objects.filter(deleted_at__isnull=True)
+    total = P.count()
+    visible = P.filter(reviewed=True).count()
+    out = P.filter(quantity__lte=0).count()
+    low = P.filter(quantity__gt=0, quantity__lte=5).count()
+    inv_buy = P.aggregate(v=Sum(F('buy_price') * F('quantity'), output_field=FloatField()))['v'] or 0
+    inv_sell = P.aggregate(v=Sum(F('sell_price') * F('quantity'), output_field=FloatField()))['v'] or 0
+    orders_total = Order.objects.count()
+    orders_pending = Order.objects.filter(status='pending').count()
+    sales_total = Order.objects.filter(status__in=['confirmed', 'paid']).aggregate(v=Sum('total'))['v'] or 0
+    customers = Customer.objects.count()
+    reviews_pending = Review.objects.filter(is_approved=False).count()
+    return [
+        {'icon': '📦', 'color': '#0B4EA2', 'label': 'المنتجات', 'value': _fmt_iqd(total),
+         'hint': f'ظاهرة للزبائن: {visible} · مخفية: {total - visible}', 'url': 'store/product/'},
+        {'icon': '💰', 'color': '#6a1b9a', 'label': 'قيمة المخزون الشرائية', 'value': _fmt_iqd(inv_buy) + ' د.ع',
+         'hint': 'مجموع (سعر الشراء × الكمية)', 'url': ''},
+        {'icon': '🏷️', 'color': '#2e7d32', 'label': 'قيمة المخزون البيعية', 'value': _fmt_iqd(inv_sell) + ' د.ع',
+         'hint': f'ربح متوقّع: {_fmt_iqd(inv_sell - inv_buy)} د.ع', 'url': ''},
+        {'icon': '⚠️', 'color': '#c62828', 'label': 'نافد / قارب النفاد', 'value': f'{out} / {low}',
+         'hint': 'الكمية = 0  ·  الكمية ≤ 5', 'url': 'store/product/?quantity__lte=5'},
+        {'icon': '🧾', 'color': '#ef6c00', 'label': 'الطلبات', 'value': _fmt_iqd(orders_total),
+         'hint': f'قيد المراجعة: {orders_pending}', 'url': 'store/order/'},
+        {'icon': '📈', 'color': '#00838f', 'label': 'إجمالي المبيعات', 'value': _fmt_iqd(sales_total) + ' د.ع',
+         'hint': 'الطلبات المؤكّدة/المدفوعة', 'url': 'store/order/'},
+        {'icon': '👥', 'color': '#5d4037', 'label': 'الزبائن', 'value': _fmt_iqd(customers),
+         'hint': f'تقييمات تنتظر الاعتماد: {reviews_pending}', 'url': 'store/customer/'},
+    ]
+
+
+_orig_index = admin.site.index
+
+
+def _index_with_stats(request, extra_context=None):
+    extra_context = extra_context or {}
+    try:
+        extra_context['store_stats'] = _dashboard_stats()
+    except Exception:
+        logger.exception('dashboard stats computation failed')
+    return _orig_index(request, extra_context)
+
+
+admin.site.index = _index_with_stats
 
 
 @admin.register(SiteSettings)
