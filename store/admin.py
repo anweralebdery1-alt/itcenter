@@ -186,6 +186,25 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         return not SiteSettings.objects.exists()
 
 
+def _reconcile_price_fields(obj, form):
+    """يوفّق بين «السعر الدولاري» و«الشراء/البيع» حسب الحقل الذي عدّله المستخدم فعلاً:
+    - عدّل السعر الدولاري فقط → اشتق الشراء/البيع منه آلياً.
+    - عدّل الشراء/البيع يدوياً → احترم القيمة المكتوبة (لا تُكتب فوقها)، ووفّق
+      السعر الدولاري مع سعر الشراء الجديد لتبقى متّسقة عند تغيير الإعدادات لاحقاً.
+    يُصلح خطأ كان يعيد كتابة التعديل اليدوي من المعادلة فيضيع السعر الجديد."""
+    changed = set(getattr(form, 'changed_data', None) or [])
+    manual_price = bool(changed & {'buy_price', 'sell_price'})
+    if obj.price_usd and ('price_usd' in changed) and not manual_price:
+        res = obj.compute_prices()
+        if res:
+            obj.buy_price, obj.sell_price = res
+    elif 'buy_price' in changed and obj.buy_price:
+        s = SiteSettings.load()
+        denom = (s.usd_rate or 0) * (1 + (s.shipping_margin_pct or 0) / 100.0)
+        if denom:
+            obj.price_usd = round(obj.buy_price / denom, 4)
+
+
 class CategoryAdminForm(forms.ModelForm):
     """استمارة التصنيف: الأب يُختار بنفس القوائم المتتابعة المستعملة في المنتج."""
 
@@ -612,11 +631,7 @@ class ProductAdmin(admin.ModelAdmin):
         return format_html('<span style="color:#c62828;font-size:11px">بلا صورة</span>')
 
     def save_model(self, request, obj, form, change):
-        # إن حُدِّد سعر دولاري، اشتق سعر الشراء/البيع منه وفق إعدادات الموقع
-        if obj.price_usd:
-            res = obj.compute_prices()
-            if res:
-                obj.buy_price, obj.sell_price = res
+        _reconcile_price_fields(obj, form)
         super().save_model(request, obj, form, change)
         form.apply_images(obj)
 
@@ -748,11 +763,7 @@ class ProductReviewAdmin(admin.ModelAdmin):
         # تأشير «تم الفحص» يزيل علامة «يحتاج انتباهاً» تلقائياً
         if obj.reviewed:
             obj.needs_review = False
-        # إن حُدِّد سعر دولاري، اشتق سعر الشراء/البيع منه تلقائياً
-        if obj.price_usd:
-            res = obj.compute_prices()
-            if res:
-                obj.buy_price, obj.sell_price = res
+        _reconcile_price_fields(obj, form)
         super().save_model(request, obj, form, change)
 
     def get_queryset(self, request):
