@@ -118,7 +118,7 @@
         <div><strong>الأكثر مبيعاً</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
       <div class="showcase-thumbs">
-        {% for p in best %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+        {% for p in best %}<span class="thumb">{% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
       </div>
     </a>
     <a class="showcase-card" href="/?sort=popular#products">
@@ -127,7 +127,7 @@
         <div><strong>الأكثر طلباً</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
       <div class="showcase-thumbs">
-        {% for p in popular %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+        {% for p in popular %}<span class="thumb">{% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
       </div>
     </a>
     <a class="showcase-card" href="/?sort=offers#products">
@@ -136,7 +136,7 @@
         <div><strong>العروض الخاصة</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
       <div class="showcase-thumbs">
-        {% for p in offers %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+        {% for p in offers %}<span class="thumb">{% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
       </div>
     </a>
     <a class="showcase-card" href="/?sort=newest#products">
@@ -145,7 +145,7 @@
         <div><strong>وصل حديثاً</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
       <div class="showcase-thumbs">
-        {% for p in newest %}<span class="thumb">{% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.name }}">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+        {% for p in newest %}<span class="thumb">{% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
       </div>
     </a>
   </section>
