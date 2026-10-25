@@ -169,7 +169,9 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         ('هوية الموقع', {'fields': ('site_name', 'tagline', 'logo')}),
         ('واجهة الصفحة الرئيسية', {'fields': ('hero_title', 'hero_subtitle', 'hero_image')}),
         ('ألوان المتجر', {'fields': ('primary_color', 'accent_color')}),
-        ('معلومات التواصل', {'fields': ('phone', 'whatsapp', 'address')}),
+        ('معلومات التواصل', {
+            'fields': (('phone', 'phone_label'), ('phone2', 'phone2_label'), 'whatsapp', 'address'),
+            'description': 'يظهر العنوان ورقما الهاتفين في أعلى الموقع على الجوال.'}),
         ('التسعير التلقائي', {
             'fields': ('usd_rate', 'shipping_margin_pct', 'profit_margin_pct'),
             'description': 'سعر الشراء = السعر الدولاري × سعر الصرف × (1 + هامش الشحن٪). '

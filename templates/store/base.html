@@ -206,6 +206,9 @@
     }
     .mobile-about:hover { color: #fff; background: rgba(255,255,255,.26); }
 
+    /* سطر العنوان + هاتفي الدكتورين — يظهر في عرض الجوال فقط أسفل الهيدر */
+    .header-contact { display: none; }
+
     /* translucent top bar (~85%) */
     @supports (background: color-mix(in srgb, red, blue)) {
       .market-header {
@@ -248,8 +251,26 @@
       .mobile-about { display: inline-flex; }
       .menu-toggle { display: inline-flex; }
       .brand { margin-inline-end: auto; min-width: 0; }
+      /* شريط البحث + زر الثلاث خطوط يرتفعان أعلى الهيدر، مباشرة تحت الشعار */
       .search-wrap { order: 3; flex: 1 0 100%; }
       body { padding-bottom: 90px; }
+
+      /* سطر التواصل داخل الهيدر: العنوان + هاتف د. أنور + هاتف د. مهند */
+      .header-contact {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 7px 16px;
+        margin-top: 9px; padding-top: 9px;
+        border-top: 1px solid rgba(255,255,255,.20);
+      }
+      .hc-item {
+        display: inline-flex; align-items: center; gap: 5px; min-width: 0;
+        color: #fff; font-size: 12.5px; font-weight: 700; text-decoration: none;
+      }
+      .hc-item svg { flex: none; opacity: .85; }
+      .hc-phone { direction: ltr; }
+      .hc-phone b { font-weight: 900; margin-inline-end: 4px; }
+      .hc-addr { flex: 1 1 100%; }
+      .hc-addr span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .hc-item:active { opacity: .7; }
 
       /* شريط سفلي طافٍ بشكل بيضوي (كبسولة) مرفوع عن الحافة — مثل إنستغرام */
       .bottom-nav {
@@ -656,6 +677,29 @@
           <span class="label">السلة</span><span class="cart-count js-cart-count" id="cart-count" {% if not cart_count %}hidden{% endif %}>{{ cart_count|default:0 }}</span>
         </a>
       </div>
+
+      {% if settings.address or settings.phone or settings.phone2 %}
+      <div class="header-contact">
+        {% if settings.address %}
+          <span class="hc-item hc-addr">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span>{{ settings.address }}</span>
+          </span>
+        {% endif %}
+        {% if settings.phone %}
+          <a class="hc-item hc-phone" href="tel:{{ settings.phone|cut:' ' }}">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            <span><b>{{ settings.phone_label|default:'د. أنور' }}</b> {{ settings.phone }}</span>
+          </a>
+        {% endif %}
+        {% if settings.phone2 %}
+          <a class="hc-item hc-phone" href="tel:{{ settings.phone2|cut:' ' }}">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            <span><b>{{ settings.phone2_label|default:'د. مهند' }}</b> {{ settings.phone2 }}</span>
+          </a>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
   </header>
 

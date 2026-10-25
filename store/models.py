@@ -135,7 +135,12 @@ class SiteSettings(ImageCompressMixin, models.Model):
     tagline = models.CharField(max_length=300, default='كل ما تحتاجه من قطع ومستلزمات إلكترونية')
     hero_title = models.CharField(max_length=300, default='مكونات إلكترونية جاهزة للطلب')
     hero_subtitle = models.TextField(default='تصفح المنتجات المتوفرة في المخزن واطلبها بنظام الدفع عند الاستلام.')
-    phone = models.CharField(max_length=50, blank=True)
+    phone = models.CharField(max_length=50, blank=True, verbose_name='هاتف أول')
+    phone_label = models.CharField(max_length=60, blank=True, default='د. أنور',
+        verbose_name='اسم صاحب الهاتف الأول', help_text='يظهر قبل الرقم الأول في الهيدر، مثل: د. أنور.')
+    phone2 = models.CharField(max_length=50, blank=True, verbose_name='هاتف ثانٍ')
+    phone2_label = models.CharField(max_length=60, blank=True, default='د. مهند',
+        verbose_name='اسم صاحب الهاتف الثاني', help_text='يظهر قبل الرقم الثاني في الهيدر، مثل: د. مهند.')
     whatsapp = models.CharField(max_length=50, blank=True)
     address = models.CharField(max_length=300, blank=True)
     logo = models.ImageField(upload_to='site/', blank=True, null=True)

@@ -4,9 +4,10 @@
 {% block extra_css %}
 <style>
   /* ---------- Showcase cards (الأكثر مبيعاً / طلباً ...) ---------- */
+  /* بطاقتان في كل سطر (حتى على الجوال) */
   .showcase {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: 1fr 1fr;
     gap: 16px;
     margin: 4px 0 10px;
   }
@@ -14,7 +15,7 @@
     background: #fff;
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 16px;
+    padding: 14px;
     box-shadow: var(--shadow-sm);
     display: flex;
     flex-direction: column;
@@ -22,22 +23,42 @@
     transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
   }
   .showcase-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--orange); }
-  .showcase-head { display: flex; align-items: center; gap: 12px; }
+  .showcase-head { display: flex; align-items: center; gap: 10px; }
   .showcase-emoji {
-    width: 46px; height: 46px; border-radius: 12px; flex: none;
-    display: grid; place-items: center; font-size: 23px;
+    width: 42px; height: 42px; border-radius: 12px; flex: none;
+    display: grid; place-items: center; font-size: 21px;
     background: linear-gradient(135deg, #eef5ff, #fff3e3);
   }
-  .showcase-head strong { font-size: 16px; display: block; color: var(--ink); }
+  .showcase-head strong { font-size: 15px; display: block; color: var(--ink); }
   .showcase-sub { font-size: 12px; color: var(--blue); font-weight: 800; }
-  .showcase-thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .thumb {
-    aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden;
+
+  /* شريط صور متحرك داخل البطاقة — يتقلّب تلقائياً بلا ضغط */
+  .sc-media {
+    position: relative; border-radius: 12px; overflow: hidden;
+    aspect-ratio: 16 / 11;
     background: linear-gradient(135deg, #eaf2ff, #fff1dc);
-    display: grid; place-items: center; color: var(--blue); font-weight: 900; font-size: 15px;
   }
-  .thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .thumb.ph { opacity: .45; }
+  .sc-slide { position: absolute; inset: 0; opacity: 0; transition: opacity .7s ease; }
+  .sc-slide.on { opacity: 1; }
+  .sc-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .sc-ph {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    color: var(--blue); font-weight: 900; font-size: 30px; opacity: .5;
+  }
+  .sc-cap {
+    position: absolute; inset-inline: 0; bottom: 0; padding: 20px 10px 7px;
+    font-size: 11.5px; font-weight: 800; color: #fff; text-align: start;
+    background: linear-gradient(transparent, rgba(2,8,23,.78));
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  @media (max-width: 420px) {
+    .showcase { gap: 11px; }
+    .showcase-card { padding: 11px; }
+    .showcase-emoji { width: 36px; height: 36px; font-size: 18px; }
+    .showcase-head strong { font-size: 13.5px; }
+    .showcase-head { gap: 8px; }
+  }
 
   /* ---------- Toolbar ---------- */
   .toolbar {
@@ -99,8 +120,13 @@
         <span class="showcase-emoji">🎓</span>
         <div><strong>الدورات التدريبية</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
-      <div class="showcase-thumbs">
-        {% for c in home_courses|slice:":4" %}<span class="thumb">{% if c.image %}<img src="{{ c.image.url }}" alt="{{ c.title }}">{% else %}{{ c.title|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">🎓</span><span class="thumb ph">🎓</span><span class="thumb ph">🎓</span><span class="thumb ph">🎓</span>{% endfor %}
+      <div class="sc-media" data-sc>
+        {% for c in home_courses|slice:":6" %}
+          <div class="sc-slide{% if forloop.first %} on{% endif %}">
+            {% if c.image %}<img src="{{ c.image.url }}" alt="{{ c.title }}" {% if not forloop.first %}loading="lazy"{% endif %} decoding="async">{% else %}<span class="sc-ph">🎓</span>{% endif %}
+            <span class="sc-cap">{{ c.title }}</span>
+          </div>
+        {% empty %}<div class="sc-slide on"><span class="sc-ph">🎓</span></div>{% endfor %}
       </div>
     </a>
     <a class="showcase-card" href="{% url 'videos' %}">
@@ -108,8 +134,13 @@
         <span class="showcase-emoji">▶️</span>
         <div><strong>فيديوهات تعليمية</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
-      <div class="showcase-thumbs">
-        {% for v in home_videos|slice:":4" %}<span class="thumb">{% if v.thumbnail %}<img src="{{ v.thumbnail.url }}" alt="{{ v.title }}" loading="lazy">{% elif v.youtube_id %}<img src="https://img.youtube.com/vi/{{ v.youtube_id }}/hqdefault.jpg" alt="{{ v.title }}" loading="lazy">{% else %}▶{% endif %}</span>{% empty %}<span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span><span class="thumb ph">▶</span>{% endfor %}
+      <div class="sc-media" data-sc>
+        {% for v in home_videos|slice:":6" %}
+          <div class="sc-slide{% if forloop.first %} on{% endif %}">
+            {% if v.thumbnail %}<img src="{{ v.thumbnail.url }}" alt="{{ v.title }}" {% if not forloop.first %}loading="lazy"{% endif %} decoding="async">{% elif v.youtube_id %}<img src="https://img.youtube.com/vi/{{ v.youtube_id }}/hqdefault.jpg" alt="{{ v.title }}" {% if not forloop.first %}loading="lazy"{% endif %} decoding="async">{% else %}<span class="sc-ph">▶</span>{% endif %}
+            <span class="sc-cap">{{ v.title }}</span>
+          </div>
+        {% empty %}<div class="sc-slide on"><span class="sc-ph">▶</span></div>{% endfor %}
       </div>
     </a>
     <a class="showcase-card" href="/?sort=best#products">
@@ -117,17 +148,13 @@
         <span class="showcase-emoji">🔥</span>
         <div><strong>الأكثر مبيعاً</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
-      <div class="showcase-thumbs">
-        {% for p in best %}<span class="thumb">{% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
-      </div>
-    </a>
-    <a class="showcase-card" href="/?sort=popular#products">
-      <div class="showcase-head">
-        <span class="showcase-emoji">⭐</span>
-        <div><strong>الأكثر طلباً</strong><span class="showcase-sub">عرض الكل ←</span></div>
-      </div>
-      <div class="showcase-thumbs">
-        {% for p in popular %}<span class="thumb">{% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+      <div class="sc-media" data-sc>
+        {% for p in best %}
+          <div class="sc-slide{% if forloop.first %} on{% endif %}">
+            {% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" {% if not forloop.first %}loading="lazy"{% endif %} decoding="async">{% else %}<span class="sc-ph">IT</span>{% endif %}
+            <span class="sc-cap">{{ p.name }}</span>
+          </div>
+        {% empty %}<div class="sc-slide on"><span class="sc-ph">IT</span></div>{% endfor %}
       </div>
     </a>
     <a class="showcase-card" href="/?sort=offers#products">
@@ -135,8 +162,27 @@
         <span class="showcase-emoji">🏷️</span>
         <div><strong>العروض الخاصة</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
-      <div class="showcase-thumbs">
-        {% for p in offers %}<span class="thumb">{% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+      <div class="sc-media" data-sc>
+        {% for p in offers %}
+          <div class="sc-slide{% if forloop.first %} on{% endif %}">
+            {% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" {% if not forloop.first %}loading="lazy"{% endif %} decoding="async">{% else %}<span class="sc-ph">IT</span>{% endif %}
+            <span class="sc-cap">{{ p.name }}</span>
+          </div>
+        {% empty %}<div class="sc-slide on"><span class="sc-ph">🏷️</span></div>{% endfor %}
+      </div>
+    </a>
+    <a class="showcase-card" href="/?sort=popular#products">
+      <div class="showcase-head">
+        <span class="showcase-emoji">⭐</span>
+        <div><strong>الأكثر طلباً</strong><span class="showcase-sub">عرض الكل ←</span></div>
+      </div>
+      <div class="sc-media" data-sc>
+        {% for p in popular %}
+          <div class="sc-slide{% if forloop.first %} on{% endif %}">
+            {% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" {% if not forloop.first %}loading="lazy"{% endif %} decoding="async">{% else %}<span class="sc-ph">IT</span>{% endif %}
+            <span class="sc-cap">{{ p.name }}</span>
+          </div>
+        {% empty %}<div class="sc-slide on"><span class="sc-ph">⭐</span></div>{% endfor %}
       </div>
     </a>
     <a class="showcase-card" href="/?sort=newest#products">
@@ -144,11 +190,33 @@
         <span class="showcase-emoji">🆕</span>
         <div><strong>وصل حديثاً</strong><span class="showcase-sub">عرض الكل ←</span></div>
       </div>
-      <div class="showcase-thumbs">
-        {% for p in newest %}<span class="thumb">{% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" loading="lazy" decoding="async">{% else %}{{ p.name|first|upper }}{% endif %}</span>{% empty %}<span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span><span class="thumb ph">IT</span>{% endfor %}
+      <div class="sc-media" data-sc>
+        {% for p in newest %}
+          <div class="sc-slide{% if forloop.first %} on{% endif %}">
+            {% if p.list_image_url %}<img src="{{ p.list_image_url }}" alt="{{ p.name }}" {% if not forloop.first %}loading="lazy"{% endif %} decoding="async">{% else %}<span class="sc-ph">IT</span>{% endif %}
+            <span class="sc-cap">{{ p.name }}</span>
+          </div>
+        {% empty %}<div class="sc-slide on"><span class="sc-ph">🆕</span></div>{% endfor %}
       </div>
     </a>
   </section>
+  <script>
+    (function () {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      var cars = document.querySelectorAll('.sc-media[data-sc]');
+      cars.forEach(function (m, idx) {
+        var slides = m.querySelectorAll('.sc-slide');
+        if (slides.length < 2) return;
+        var i = 0;
+        var delay = 2800 + (idx % 4) * 500;   // تفاوت بسيط فتتحرك البطاقات بحيوية لا دفعةً واحدة
+        setInterval(function () {
+          slides[i].classList.remove('on');
+          i = (i + 1) % slides.length;
+          slides[i].classList.add('on');
+        }, delay);
+      });
+    })();
+  </script>
   {% endif %}
 
   {% if search and search_videos %}

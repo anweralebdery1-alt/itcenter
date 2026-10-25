@@ -74,12 +74,14 @@ class ProductAvailabilityDisplayTests(TestCase):
             sku="AVAILABLE",
             sell_price=1000,
             quantity=37,
+            reviewed=True,
         )
         Product.objects.create(
             name="Unavailable product",
             sku="UNAVAILABLE",
             sell_price=1000,
             quantity=0,
+            reviewed=True,
         )
 
         home_response = self.client.get("/")
@@ -105,6 +107,7 @@ class ProductGalleryTests(TestCase):
                     sell_price=1000,
                     quantity=5,
                     image=_uploaded_test_image(800, 800),
+                    reviewed=True,
                 )
                 for position in range(1, MAX_GALLERY_IMAGES + 1):
                     ProductImage.objects.create(
@@ -379,7 +382,7 @@ class LegacyEndpointsClosedTests(TestCase):
     def test_public_product_api_hides_purchase_price(self):
         from .models import Product
         Product.objects.create(name='منتج', sku='1', buy_price=7500,
-                               sell_price=10500, quantity=3)
+                               sell_price=10500, quantity=3, reviewed=True)
         body = self.client.get('/api/products/').content.decode()
         self.assertIn('10500', body)
         self.assertNotIn('7500', body)      # سعر الشراء لا يخرج للعلن
@@ -625,7 +628,7 @@ class CategoryUnifiedTreeTests(TestCase):
 
         self.deep_product = Product.objects.create(
             name='مروحة كاربون', sku='DR-1', sell_price=5000, quantity=4,
-            category=self.grandchild)
+            category=self.grandchild, reviewed=True)
 
     def test_choosing_a_root_shows_products_of_its_grandchildren(self):
         response = self.client.get('/', {'view': 'electronics',
