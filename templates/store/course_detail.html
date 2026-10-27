@@ -1,0 +1,249 @@
+{% extends 'store/base.html' %}
+{% load store_extras %}
+{% block title %}{{ course.title }} | {{ settings.site_name }}{% endblock %}
+{% block extra_css %}
+<style>
+  .cd-wrap { max-width: 920px; margin: 0 auto; }
+  .cd-hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: stretch;
+    background: #fff; border: 1px solid var(--line,#e6e8ee); border-radius: 18px; overflow: hidden; margin: 10px 0 20px; }
+  .cd-hero-img { background: linear-gradient(135deg,#eaf2ff,#fff1dc); min-height: 220px; display: grid; place-items: center; }
+  .cd-hero-img img { width: 100%; height: 100%; object-fit: cover; }
+  .cd-hero-img .ph { font-size: 60px; opacity: .5; }
+  .cd-hero-body { padding: 20px; display: flex; flex-direction: column; }
+  .cd-hero-body h1 { font-size: clamp(19px,3.6vw,26px); margin: 0 0 8px; letter-spacing: -.3px; }
+  .cd-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; color: #475569; font-size: 13.5px; font-weight: 700; margin-bottom: 10px; }
+  .cd-meta b { color: var(--ink,#0f172a); }
+  .cd-rating-line .stars { color:#f59e0b; letter-spacing:2px; font-size:17px; }
+  .cd-rating-line .empty { color:#d1d5db; }
+  .cd-price { font-size: 22px; font-weight: 900; color: var(--blue,#0B4EA2); margin: 12px 0; }
+  .cd-price small { font-size: 13px; }
+  .cd-free { color:#047857; font-weight:900; }
+  .cd-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; background: var(--orange,#FF8A00);
+    color:#fff; font-weight:900; border-radius:12px; padding:13px 18px; text-decoration:none; margin-top:auto; }
+  .cd-btn:active { transform: scale(.98); }
+
+  .cd-section { background:#fff; border:1px solid var(--line,#e6e8ee); border-radius:16px; padding:18px 20px; margin:16px 0; }
+  .cd-section > h2 { font-size:18px; margin:0 0 14px; display:flex; align-items:center; gap:10px; }
+  .cd-section > h2 .tag { width:6px; height:22px; border-radius:99px; background:linear-gradient(var(--orange,#FF8A00),var(--blue,#0B4EA2)); }
+  .cd-desc { color:#334155; line-height:1.9; white-space:pre-line; }
+
+  /* المحاضرات */
+  .lectures { list-style:none; margin:0; padding:0; counter-reset: lec; }
+  .lecture { display:flex; gap:12px; padding:12px 0; border-bottom:1px dashed var(--line,#e6e8ee); }
+  .lecture:last-child { border-bottom:0; }
+  .lecture .num { counter-increment: lec; flex:none; width:30px; height:30px; border-radius:9px; background:#eef5ff;
+    color:var(--blue,#0B4EA2); font-weight:900; display:grid; place-items:center; font-size:14px; }
+  .lecture .num::before { content: counter(lec); }
+  .lecture .lec-body { min-width:0; }
+  .lecture .lec-title { font-weight:800; color:var(--ink,#0f172a); }
+  .lecture .lec-dur { font-size:12px; color:#64748b; font-weight:700; }
+  .lecture .lec-desc { font-size:13px; color:#475569; margin-top:3px; line-height:1.7; white-space:pre-line; }
+
+  /* معرض الصور/الفيديوهات */
+  .cd-media-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+  .cd-media-item { position:relative; aspect-ratio:4/3; border-radius:12px; overflow:hidden; cursor:pointer;
+    background:#0b1220; border:1px solid var(--line,#e6e8ee); padding:0; }
+  .cd-media-item img { width:100%; height:100%; object-fit:cover; display:block; }
+  .cd-media-item .play { position:absolute; inset:0; display:grid; place-items:center; }
+  .cd-media-item .play svg { width:46px; height:46px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); }
+  .cd-media-cap { position:absolute; inset-inline:0; bottom:0; padding:14px 8px 6px; color:#fff; font-size:11px; font-weight:800;
+    background:linear-gradient(transparent,rgba(2,8,23,.75)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* التسجيل */
+  .reg-form { display:grid; gap:12px; max-width:480px; }
+  .reg-form input { width:100%; border:1px solid var(--line,#e6e8ee); border-radius:12px; padding:12px 14px; font-family:inherit; font-size:14px; }
+  .reg-alert { border-radius:12px; padding:12px 15px; font-weight:800; font-size:14px; }
+  .reg-alert.ok { background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; }
+  .reg-alert.pend { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+  .reg-alert.err { background:#fef2f2; color:#b42318; border:1px solid #fecaca; }
+
+  /* التقييمات */
+  .stars { color:#f59e0b; letter-spacing:2px; font-size:18px; }
+  .stars .empty { color:#d1d5db; }
+  .review-item { border-bottom:1px solid var(--line,#e6e8ee); padding:14px 0; }
+  .review-item .who { font-weight:800; }
+  .review-item .muted { color:#64748b; font-size:12px; }
+  .review-form { margin-top:14px; }
+  .rating-input { display:inline-flex; flex-direction:row-reverse; gap:4px; font-size:30px; }
+  .rating-input input { display:none; }
+  .rating-input label { color:#d1d5db; cursor:pointer; transition:color .1s; }
+  .rating-input input:checked ~ label, .rating-input label:hover, .rating-input label:hover ~ label { color:#f59e0b; }
+  .review-form textarea, .review-form input[type=text] { width:100%; border:1px solid var(--line,#e6e8ee); border-radius:12px; padding:11px 14px; font-family:inherit; font-size:14px; margin-top:8px; }
+  .review-form textarea { min-height:90px; resize:vertical; }
+  .review-submit { background:var(--orange,#FF8A00); color:#fff; border:0; font-weight:900; border-radius:12px; padding:12px 20px; cursor:pointer; margin-top:10px; }
+  .review-gate { background:#f8fafc; border:1px dashed var(--line,#e6e8ee); color:#475569; border-radius:12px; padding:16px; font-weight:700; margin-top:14px; text-align:center; }
+  .review-ok { background:#dcfce7; color:#166534; border-radius:10px; padding:10px 14px; font-weight:700; margin-top:12px; }
+
+  .cd-modal { position:fixed; inset:0; z-index:200; display:none; align-items:center; justify-content:center; background:rgba(2,8,23,.75); padding:18px; }
+  .cd-modal.open { display:flex; }
+  .cd-modal-box { max-width:720px; width:100%; }
+  .cd-modal-box img, .cd-modal-box iframe { width:100%; border-radius:14px; display:block; background:#000; }
+  .cd-modal-box iframe { aspect-ratio:16/9; border:0; }
+  .cd-modal-close { float:inline-end; background:rgba(0,0,0,.5); color:#fff; border:0; width:36px; height:36px; border-radius:999px; font-size:18px; cursor:pointer; margin-bottom:8px; }
+
+  @media (max-width:640px){ .cd-hero { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+{% block content %}
+<main class="container-wide mt-4">
+ <div class="cd-wrap">
+
+  <section class="cd-hero">
+    <div class="cd-hero-img">
+      {% if course.image %}<img src="{{ course.image.url }}" alt="{{ course.title }}">{% else %}<span class="ph">🎓</span>{% endif %}
+    </div>
+    <div class="cd-hero-body">
+      <h1>{{ course.title }}</h1>
+      <div class="cd-meta">
+        <span>👤 المدرب: <b>{{ course.trainer|default:"يحدد لاحقاً" }}</b></span>
+        {% if course.duration %}<span>⏱ <b>{{ course.duration }}</b></span>{% endif %}
+        <span>📚 <b>{{ lectures|length }}</b> محاضرة</span>
+      </div>
+      <div class="cd-rating-line">
+        <span class="stars">{% for i in "12345" %}{% if forloop.counter <= review_avg_int %}★{% else %}<span class="empty">★</span>{% endif %}{% endfor %}</span>
+        <span class="muted">{% if review_count %}{{ review_avg }} ({{ review_count }} تقييم){% else %}لا تقييمات بعد{% endif %}</span>
+      </div>
+      <div class="cd-price">{% if course.price %}{{ course.price|money }} <small>د.ع</small>{% else %}<span class="cd-free">مجانية / يحدد لاحقاً</span>{% endif %}</div>
+      <a href="#register" class="cd-btn">التسجيل في الدورة</a>
+    </div>
+  </section>
+
+  {% if course.description %}
+  <section class="cd-section">
+    <h2><span class="tag"></span>عن الدورة</h2>
+    <div class="cd-desc">{{ course.description }}</div>
+  </section>
+  {% endif %}
+
+  {% if lectures %}
+  <section class="cd-section">
+    <h2><span class="tag"></span>محتوى الدورة — {{ lectures|length }} محاضرة</h2>
+    <ul class="lectures">
+      {% for lec in lectures %}
+        <li class="lecture">
+          <span class="num"></span>
+          <div class="lec-body">
+            <div class="lec-title">{{ lec.title }}{% if lec.duration %} <span class="lec-dur">· {{ lec.duration }}</span>{% endif %}</div>
+            {% if lec.description %}<div class="lec-desc">{{ lec.description }}</div>{% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if media %}
+  <section class="cd-section">
+    <h2><span class="tag"></span>من دورات سابقة</h2>
+    <div class="cd-media-grid">
+      {% for m in media %}
+        <button type="button" class="cd-media-item"
+                data-type="{{ m.media_type }}"
+                data-img="{{ m.thumb_url }}"
+                data-embed="{{ m.youtube_embed_url }}"
+                data-cap="{{ m.caption }}">
+          {% if m.thumb_url %}<img src="{{ m.thumb_url }}" alt="{{ m.caption }}" loading="lazy" decoding="async">{% endif %}
+          {% if m.media_type == 'video' %}<span class="play"><svg viewBox="0 0 24 24" fill="#fff"><circle cx="12" cy="12" r="11" fill="rgba(0,0,0,.45)"/><path d="M10 8l6 4-6 4z" fill="#fff"/></svg></span>{% endif %}
+          {% if m.caption %}<span class="cd-media-cap">{{ m.caption }}</span>{% endif %}
+        </button>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="cd-section" id="register">
+    <h2><span class="tag"></span>التسجيل في الدورة</h2>
+    {% if reg_ok %}<div class="reg-alert ok">✓ تم استلام تسجيلك، سنتواصل معك لتأكيده.</div>{% endif %}
+    {% if request.GET.reg == 'err' %}<div class="reg-alert err">يرجى إدخال الاسم ورقم الهاتف.</div>{% endif %}
+    {% if registration_status == 'confirmed' %}
+      <div class="reg-alert ok">✓ تسجيلك في هذه الدورة مؤكّد. يمكنك الآن تقييمها في الأسفل.</div>
+    {% elif registration_status == 'pending' %}
+      <div class="reg-alert pend">⏳ طلب تسجيلك قيد المراجعة، سنتواصل معك قريباً.</div>
+    {% else %}
+      <form class="reg-form" method="post" action="{% url 'register_course' course.pk %}#register">
+        {% csrf_token %}
+        <input name="full_name" value="{{ customer_name }}" required placeholder="الاسم الكامل">
+        <input name="phone" required placeholder="07XXXXXXXXX" inputmode="tel">
+        <button type="submit" class="review-submit" style="margin:0;">إرسال طلب التسجيل</button>
+      </form>
+    {% endif %}
+  </section>
+
+  <section class="cd-section" id="reviews">
+    <h2><span class="tag"></span>تقييمات المتدربين</h2>
+    <div style="margin-bottom:10px;">
+      <span class="stars">{% for i in "12345" %}{% if forloop.counter <= review_avg_int %}★{% else %}<span class="empty">★</span>{% endif %}{% endfor %}</span>
+      <span class="muted">{% if review_count %}{{ review_avg }} من 5 — {{ review_count }} تقييم{% else %}كن أول من يقيّم هذه الدورة{% endif %}</span>
+    </div>
+
+    {% if review_ok %}<div class="review-ok">شكراً لك! تم نشر تقييمك.</div>{% endif %}
+    {% if request.GET.review == 'denied' %}<div class="review-gate">يمكنك تقييم الدورة بعد تثبيت تسجيلك فيها.</div>{% endif %}
+    {% if request.GET.review == 'dup' %}<div class="review-gate">لقد قيّمت هذه الدورة مسبقاً.</div>{% endif %}
+
+    {% for r in reviews %}
+      <div class="review-item">
+        <div class="who">{{ r.name }} <span class="stars" style="font-size:14px;">{% for i in "12345" %}{% if forloop.counter <= r.rating %}★{% else %}<span class="empty">★</span>{% endif %}{% endfor %}</span></div>
+        {% if r.comment %}<div style="color:#334155; margin-top:4px; line-height:1.8;">{{ r.comment }}</div>{% endif %}
+        <div class="muted">{{ r.created_at|date:"Y/m/d" }}</div>
+      </div>
+    {% empty %}
+      {% if not can_review %}<p class="muted">لا توجد تقييمات بعد.</p>{% endif %}
+    {% endfor %}
+
+    {% if can_review %}
+      <form class="review-form" method="post" action="{% url 'submit_course_review' course.pk %}#reviews">
+        {% csrf_token %}
+        <div class="rating-input">
+          <input type="radio" id="cs5" name="rating" value="5" checked><label for="cs5">★</label>
+          <input type="radio" id="cs4" name="rating" value="4"><label for="cs4">★</label>
+          <input type="radio" id="cs3" name="rating" value="3"><label for="cs3">★</label>
+          <input type="radio" id="cs2" name="rating" value="2"><label for="cs2">★</label>
+          <input type="radio" id="cs1" name="rating" value="1"><label for="cs1">★</label>
+        </div>
+        <input type="text" name="name" value="{{ customer_name }}" placeholder="اسمك (اختياري)">
+        <textarea name="comment" placeholder="شاركنا رأيك في الدورة…"></textarea>
+        <button type="submit" class="review-submit">نشر التقييم</button>
+      </form>
+    {% elif already_reviewed %}
+      <div class="review-gate">شكراً، لقد قيّمت هذه الدورة مسبقاً.</div>
+    {% elif not is_logged_in %}
+      <div class="review-gate">سجّل دخولك من <a href="{% url 'account' %}">حسابك</a> بعد تثبيت تسجيلك لتتمكن من التقييم.</div>
+    {% elif registration_status != 'confirmed' %}
+      <div class="review-gate">يمكنك تقييم الدورة بعد تثبيت تسجيلك فيها.</div>
+    {% endif %}
+  </section>
+
+ </div>
+</main>
+
+<div class="cd-modal" id="cdModal" aria-hidden="true">
+  <div class="cd-modal-box">
+    <button type="button" class="cd-modal-close" id="cdModalClose" aria-label="إغلاق">✕</button>
+    <div id="cdModalContent"></div>
+  </div>
+</div>
+<script>
+  (function () {
+    var modal = document.getElementById('cdModal');
+    var box = document.getElementById('cdModalContent');
+    function close() { modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); box.innerHTML=''; }
+    document.querySelectorAll('.cd-media-item').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var type = b.getAttribute('data-type');
+        var embed = b.getAttribute('data-embed');
+        var img = b.getAttribute('data-img');
+        if (type === 'video' && embed) {
+          box.innerHTML = '<iframe src="' + embed + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+        } else if (img) {
+          box.innerHTML = '<img src="' + img + '" alt="">';
+        } else { return; }
+        box.insertAdjacentElement('beforebegin', document.getElementById('cdModalClose'));
+        modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+      });
+    });
+    document.getElementById('cdModalClose').addEventListener('click', close);
+    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  })();
+</script>
+{% endblock %}

@@ -603,6 +603,116 @@ class Course(ImageCompressMixin, models.Model):
     def __str__(self):
         return self.title
 
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('course_detail', args=[self.pk])
+
+    @property
+    def lectures_count(self):
+        return self.lectures.count()
+
+
+class CourseLecture(models.Model):
+    """محاضرة ضمن دورة — تظهر مرقّمة بعنوانها في صفحة الدورة."""
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='lectures')
+    order = models.IntegerField(default=0, verbose_name='الترتيب')
+    title = models.CharField(max_length=250, verbose_name='عنوان المحاضرة')
+    description = models.TextField(blank=True, verbose_name='تفاصيل المحاضرة')
+    duration = models.CharField(max_length=60, blank=True, verbose_name='المدة',
+                                help_text='اختياري، مثل: ساعتان.')
+
+    class Meta:
+        ordering = ('order', 'id')
+        verbose_name = 'محاضرة'
+        verbose_name_plural = 'محاضرات الدورة'
+
+    def __str__(self):
+        return self.title
+
+
+class CourseMedia(ImageCompressMixin, models.Model):
+    """صورة أو فيديو من دورات سابقة يُعرض في صفحة الدورة."""
+    image_fields = ('image',)
+    MEDIA_CHOICES = [('image', 'صورة'), ('video', 'فيديو YouTube')]
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='media')
+    media_type = models.CharField(max_length=10, choices=MEDIA_CHOICES, default='image',
+                                  verbose_name='النوع')
+    image = models.ImageField(upload_to='courses/media/', blank=True, null=True, verbose_name='صورة')
+    video_url = models.URLField(blank=True, verbose_name='رابط فيديو (YouTube)')
+    caption = models.CharField(max_length=250, blank=True, verbose_name='تعليق')
+    order = models.IntegerField(default=0, verbose_name='الترتيب')
+
+    class Meta:
+        ordering = ('order', 'id')
+        verbose_name = 'صورة/فيديو للدورة'
+        verbose_name_plural = 'صور وفيديوهات الدورة (من دورات سابقة)'
+
+    def __str__(self):
+        return self.caption or f'{self.get_media_type_display()} #{self.pk}'
+
+    @property
+    def youtube_id(self):
+        import re
+        m = re.search(r'(?:v=|youtu\.be/|/embed/|/shorts/|/live/)([A-Za-z0-9_-]{11})', self.video_url or '')
+        return m.group(1) if m else ''
+
+    @property
+    def youtube_embed_url(self):
+        vid = self.youtube_id
+        return f'https://www.youtube.com/embed/{vid}' if vid else ''
+
+    @property
+    def thumb_url(self):
+        if self.image:
+            return self.image.url
+        if self.youtube_id:
+            return f'https://img.youtube.com/vi/{self.youtube_id}/hqdefault.jpg'
+        return ''
+
+
+class CourseRegistration(models.Model):
+    """تسجيل زبون في دورة — يراجعه الأدمن ويؤكّده ليحقّ لصاحبه التقييم."""
+    STATUS_CHOICES = [
+        ('pending', 'بانتظار التأكيد'),
+        ('confirmed', 'مؤكّد'),
+        ('cancelled', 'ملغى'),
+    ]
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='registrations')
+    full_name = models.CharField(max_length=120, verbose_name='الاسم')
+    phone = models.CharField(max_length=50, verbose_name='رقم الهاتف')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending',
+                              verbose_name='الحالة')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+        unique_together = ('course', 'phone')
+        verbose_name = 'تسجيل دورة'
+        verbose_name_plural = '📝 تسجيلات الدورات'
+
+    def __str__(self):
+        return f'{self.full_name} - {self.course}'
+
+
+class CourseReview(models.Model):
+    """تقييم دورة من زبون ثبت تسجيله فيها."""
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='reviews')
+    name = models.CharField(max_length=120, verbose_name='الاسم')
+    phone = models.CharField(max_length=50, blank=True, verbose_name='هاتف المقيّم')
+    rating = models.PositiveSmallIntegerField(
+        default=5, validators=[MinValueValidator(1), MaxValueValidator(5)], verbose_name='التقييم (نجوم)')
+    comment = models.TextField(blank=True, verbose_name='التعليق')
+    is_approved = models.BooleanField(default=True, verbose_name='معتمَد للنشر')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+        verbose_name = 'تقييم دورة'
+        verbose_name_plural = 'تقييمات الدورات'
+
+    def __str__(self):
+        return f'{self.name} - {self.course} ({self.rating}★)'
+
 
 class EducationalVideo(ImageCompressMixin, models.Model):
     image_fields = ('thumbnail',)

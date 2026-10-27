@@ -8,16 +8,16 @@
   <div class="product-grid">
     {% for course in courses %}
       <div class="product-card">
-        <div class="product-image">
+        <a href="{{ course.get_absolute_url }}" class="product-image" style="text-decoration:none;">
           {% if course.image %}<img src="{{ course.image.url }}" alt="{{ course.title }}">{% else %}{{ course.title|first|upper }}{% endif %}
-        </div>
+        </a>
         <div class="product-info">
-          <div class="product-name">{{ course.title }}</div>
+          <a href="{{ course.get_absolute_url }}" class="product-name" style="color:inherit; text-decoration:none;">{{ course.title }}</a>
           <div class="product-desc">{{ course.description|truncatechars:100 }}</div>
-          <div class="sku mt-1">👤 المدرب: {{ course.trainer|default:"يحدد لاحقاً" }}{% if course.duration %} · ⏱ {{ course.duration }}{% endif %}</div>
+          <div class="sku mt-1">👤 المدرب: {{ course.trainer|default:"يحدد لاحقاً" }}{% if course.duration %} · ⏱ {{ course.duration }}{% endif %}{% if course.lectures_count %} · 📚 {{ course.lectures_count }} محاضرة{% endif %}</div>
           <div class="spacer"></div>
           <div class="price">{% if course.price %}{{ course.price|money }} <small>د.ع</small>{% else %}<span style="color:#047857">مجانية / يحدد لاحقاً</span>{% endif %}</div>
-          <a href="{% url 'checkout_phone' %}" class="btn btn-orange w-100 mt-2">التسجيل في الدورة</a>
+          <a href="{{ course.get_absolute_url }}" class="btn btn-orange w-100 mt-2">عرض التفاصيل والتسجيل</a>
         </div>
       </div>
     {% empty %}

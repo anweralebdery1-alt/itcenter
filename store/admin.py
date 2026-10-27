@@ -17,6 +17,10 @@ from .models import (
     AppRelease,
     Category,
     Course,
+    CourseLecture,
+    CourseMedia,
+    CourseRegistration,
+    CourseReview,
     Customer,
     DownloadableFile,
     EducationalVideo,
@@ -66,6 +70,8 @@ def _badge_count_for_model(object_name):
         return PhoneOTP.objects.filter(is_used=False).count()
     if object_name == 'ProjectHelpRequest':
         return ProjectHelpRequest.objects.filter(status='new').count()
+    if object_name == 'CourseRegistration':
+        return CourseRegistration.objects.filter(status='pending').count()
     return 0
 
 
@@ -76,7 +82,7 @@ _ADMIN_GROUPS = [
     ('🛒 المنتجات والمخزون', ['Product', 'ProductReview', 'Category', 'StockMove']),
     ('🧾 المبيعات والزبائن', ['Order', 'SaleReservation', 'Customer']),
     ('⭐ تفاعل الزبائن', ['Review', 'PushSubscription', 'PhoneOTP']),
-    ('🎓 المحتوى التعليمي', ['Course', 'EducationalVideo', 'DownloadableFile']),
+    ('🎓 المحتوى التعليمي', ['Course', 'CourseRegistration', 'CourseReview', 'EducationalVideo', 'DownloadableFile']),
     ('🎓 مشاريع التخرّج', ['GraduationProject', 'ProjectHelpRequest']),
     ('🎨 واجهة الموقع', ['SiteSettings', 'SiteSection', 'TeamMember']),
     ('🔄 المزامنة وإصدارات البرنامج', ['PosDevice', 'PosEvent', 'AppRelease']),
@@ -903,12 +909,49 @@ class DownloadableFileInline(admin.TabularInline):
     extra = 0
 
 
+class CourseLectureInline(admin.TabularInline):
+    model = CourseLecture
+    extra = 1
+    fields = ('order', 'title', 'duration', 'description')
+
+
+class CourseMediaInline(admin.TabularInline):
+    model = CourseMedia
+    extra = 1
+    fields = ('order', 'media_type', 'image', 'video_url', 'caption')
+
+
 @admin.register(Course)
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ('title', 'trainer', 'price', 'duration', 'is_active', 'created_at')
+    list_display = ('title', 'trainer', 'price', 'duration', 'lectures_count', 'is_active', 'created_at')
     list_editable = ('is_active',)
     search_fields = ('title', 'description', 'trainer')
-    inlines = (DownloadableFileInline,)
+    inlines = (CourseLectureInline, CourseMediaInline, DownloadableFileInline)
+
+    @admin.display(description='المحاضرات')
+    def lectures_count(self, obj):
+        return obj.lectures.count()
+
+
+@admin.register(CourseRegistration)
+class CourseRegistrationAdmin(admin.ModelAdmin):
+    list_display = ('full_name', 'phone', 'course', 'status', 'created_at')
+    list_editable = ('status',)
+    list_filter = ('status', 'course')
+    search_fields = ('full_name', 'phone', 'course__title')
+    readonly_fields = ('full_name', 'phone', 'course', 'created_at')
+    fields = ('full_name', 'phone', 'course', 'status', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(CourseReview)
+class CourseReviewAdmin(admin.ModelAdmin):
+    list_display = ('name', 'course', 'rating', 'is_approved', 'created_at')
+    list_editable = ('is_approved',)
+    list_filter = ('is_approved', 'rating', 'course')
+    search_fields = ('name', 'phone', 'comment', 'course__title')
 
 
 @admin.register(EducationalVideo)

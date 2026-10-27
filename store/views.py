@@ -126,6 +126,8 @@ from django.views.decorators.http import require_POST
 from .models import (
     Category,
     Course,
+    CourseRegistration,
+    CourseReview,
     Customer,
     EducationalVideo,
     GraduationProject,
@@ -432,6 +434,87 @@ def courses(request):
     context = _base_context(request)
     context.update({'courses': Course.objects.filter(is_active=True).order_by('-created_at')})
     return render(request, 'store/courses.html', context)
+
+
+def _customer_registered_confirmed(phone, course):
+    """هل سجّل صاحب هذا الرقم في الدورة وثُبّت تسجيله؟"""
+    if not phone:
+        return False
+    return course.registrations.filter(phone=phone, status='confirmed').exists()
+
+
+def course_detail(request, pk):
+    course = get_object_or_404(Course, pk=pk, is_active=True)
+    reviews = course.reviews.filter(is_approved=True)
+    stats = reviews.aggregate(avg=Avg('rating'), count=Count('id'))
+    phone = request.session.get('customer_phone')
+    registration = course.registrations.filter(phone=phone).first() if phone else None
+    is_confirmed = bool(registration and registration.status == 'confirmed')
+    already_reviewed = bool(phone) and course.reviews.filter(phone=phone).exists()
+    customer_name = ''
+    if phone:
+        cust = Customer.objects.filter(phone=phone).first()
+        customer_name = cust.full_name if cust else ''
+    context = _base_context(request)
+    context.update({
+        'course': course,
+        'lectures': list(course.lectures.all()),
+        'media': list(course.media.all()),
+        'reviews': reviews,
+        'review_avg': round(stats['avg'] or 0, 1),
+        'review_avg_int': int(round(stats['avg'] or 0)),
+        'review_count': stats['count'],
+        'is_logged_in': bool(phone),
+        'customer_name': customer_name,
+        'registration_status': registration.status if registration else '',
+        'is_confirmed': is_confirmed,
+        'can_review': is_confirmed and not already_reviewed,
+        'already_reviewed': already_reviewed,
+        'review_ok': request.GET.get('review') == 'ok',
+        'reg_ok': request.GET.get('reg') == 'ok',
+        'more_courses': Course.objects.filter(is_active=True).exclude(pk=course.pk).order_by('-created_at')[:6],
+    })
+    return render(request, 'store/course_detail.html', context)
+
+
+@require_POST
+def register_course(request, pk):
+    course = get_object_or_404(Course, pk=pk, is_active=True)
+    full_name = (request.POST.get('full_name') or '').strip()[:120]
+    phone = (request.POST.get('phone') or request.session.get('customer_phone') or '').strip()[:50]
+    if not (full_name and phone):
+        return redirect(course.get_absolute_url() + '?reg=err#register')
+    reg = course.registrations.filter(phone=phone).first()
+    if reg is None:
+        CourseRegistration.objects.create(course=course, full_name=full_name, phone=phone)
+    elif reg.status == 'cancelled':
+        reg.status = 'pending'
+        reg.full_name = full_name
+        reg.save(update_fields=['status', 'full_name'])
+    return redirect(course.get_absolute_url() + '?reg=ok#register')
+
+
+@require_POST
+def submit_course_review(request, pk):
+    course = get_object_or_404(Course, pk=pk)
+    phone = request.session.get('customer_phone')
+    # التقييم من حق من ثبت تسجيله في الدورة فقط
+    if not _customer_registered_confirmed(phone, course):
+        return redirect(course.get_absolute_url() + '?review=denied#reviews')
+    if course.reviews.filter(phone=phone).exists():
+        return redirect(course.get_absolute_url() + '?review=dup#reviews')
+    name = (request.POST.get('name') or '').strip()[:120]
+    comment = (request.POST.get('comment') or '').strip()[:2000]
+    try:
+        rating = int(request.POST.get('rating', 5))
+    except (TypeError, ValueError):
+        rating = 5
+    rating = max(1, min(5, rating))
+    if not name:
+        cust = Customer.objects.filter(phone=phone).first()
+        name = (cust.full_name if cust else '') or 'زبون'
+    CourseReview.objects.create(course=course, name=name, phone=phone, rating=rating, comment=comment)
+    return redirect(course.get_absolute_url() + '?review=ok#reviews')
 
 
 def videos(request):
