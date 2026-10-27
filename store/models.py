@@ -662,6 +662,87 @@ class EducationalVideo(ImageCompressMixin, models.Model):
         return ''
 
 
+class GraduationProject(ImageCompressMixin, models.Model):
+    """مشروع تخرّج مُنجَز سابقاً — يُعرض كمعرض مصنّف في صفحة المساعدة بمشاريع التخرج."""
+    image_fields = ('image',)
+    CATEGORY_CHOICES = [
+        ('medical', 'أجهزة طبية'),
+        ('computers', 'حاسبات'),
+        ('electronics', 'إلكترونيات'),
+        ('communications', 'اتصالات'),
+        ('power', 'كهرباء وقدرة'),
+        ('mechatronics', 'ميكاترونكس وروبوت'),
+        ('iot', 'إنترنت الأشياء (IoT)'),
+        ('ai', 'ذكاء اصطناعي ورؤية حاسوبية'),
+        ('other', 'أخرى'),
+    ]
+    title = models.CharField(max_length=250, verbose_name='اسم المشروع')
+    category = models.CharField(max_length=30, choices=CATEGORY_CHOICES, default='other',
+                                verbose_name='التصنيف')
+    image = models.ImageField(upload_to='grad_projects/', blank=True, null=True,
+                              verbose_name='صورة المشروع')
+    description = models.TextField(blank=True, verbose_name='وصف المشروع',
+                                   help_text='يظهر عند الضغط على صورة المشروع.')
+    study_type = models.CharField(max_length=60, blank=True, verbose_name='نوع الدراسة',
+                                  help_text='اختياري: بكالوريوس/ماجستير/دكتوراه…')
+    year = models.CharField(max_length=20, blank=True, verbose_name='السنة')
+    order = models.IntegerField(default=0, verbose_name='الترتيب')
+    is_active = models.BooleanField(default=True, verbose_name='ظاهر في الموقع')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('order', '-created_at')
+        verbose_name = 'مشروع تخرّج'
+        verbose_name_plural = '🎓 مشاريع التخرّج'
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def category_label(self):
+        return dict(self.CATEGORY_CHOICES).get(self.category, self.category)
+
+
+class ProjectHelpRequest(models.Model):
+    """طلب مساعدة في مشروع تخرّج يُقدَّم من الزائر لنتواصل معه بأجور الخدمة."""
+    STUDY_CHOICES = [
+        ('bachelor', 'بكالوريوس'),
+        ('master', 'ماجستير'),
+        ('phd', 'دكتوراه'),
+        ('institute', 'معهد'),
+        ('mini', 'مشروع مصغّر (Mini Project)'),
+        ('vocational', 'مهني'),
+        ('other', 'أخرى'),
+    ]
+    STATUS_CHOICES = [
+        ('new', 'جديد'),
+        ('contacted', 'تم التواصل'),
+        ('done', 'منجز'),
+        ('cancelled', 'ملغى'),
+    ]
+    full_name = models.CharField(max_length=120, verbose_name='الاسم')
+    phone = models.CharField(max_length=50, verbose_name='رقم الهاتف')
+    specialization = models.CharField(max_length=150, verbose_name='الاختصاص')
+    study_type = models.CharField(max_length=20, choices=STUDY_CHOICES, default='bachelor',
+                                  verbose_name='نوع الدراسة')
+    details = models.TextField(verbose_name='تفاصيل المشروع')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new',
+                              verbose_name='الحالة')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+        verbose_name = 'طلب مساعدة مشروع'
+        verbose_name_plural = '🧑‍🎓 طلبات مساعدة المشاريع'
+
+    def __str__(self):
+        return f'{self.full_name} — {self.get_study_type_display()}'
+
+    @property
+    def study_type_label(self):
+        return dict(self.STUDY_CHOICES).get(self.study_type, self.study_type)
+
+
 class DownloadableFile(models.Model):
     title = models.CharField(max_length=250)
     description = models.TextField(blank=True)

@@ -128,10 +128,12 @@ from .models import (
     Course,
     Customer,
     EducationalVideo,
+    GraduationProject,
     Order,
     OrderItem,
     PhoneOTP,
     Product,
+    ProjectHelpRequest,
     PushSubscription,
     Review,
     SiteSection,
@@ -322,6 +324,7 @@ def home(request):
         # الدورات والفيديوهات لعرضها في الرئيسية (بطاقات عرض + الدورات كمنتجات)
         'home_courses': list(Course.objects.filter(is_active=True).order_by('-created_at')[:8]),
         'home_videos': list(EducationalVideo.objects.filter(is_active=True).order_by('project_number')[:4]),
+        'grad_projects': list(GraduationProject.objects.filter(is_active=True)[:8]),
         'visited_products': _visited_products(request),
         'search': search,
         'selected_category': category_id,
@@ -488,6 +491,48 @@ def about(request):
     context = _base_context(request)
     context.update({'team': TeamMember.objects.filter(is_active=True)})
     return render(request, 'store/about.html', context)
+
+
+def graduation_projects(request):
+    """صفحة مساعدة مشاريع التخرّج: معرض مشاريع منجزة مصنّف + فورمة طلب مساعدة."""
+    submitted = False
+    form_error = ''
+    form = {'full_name': '', 'phone': '', 'specialization': '', 'study_type': 'bachelor', 'details': ''}
+    if request.method == 'POST':
+        form = {
+            'full_name': (request.POST.get('full_name') or '').strip(),
+            'phone': (request.POST.get('phone') or '').strip(),
+            'specialization': (request.POST.get('specialization') or '').strip(),
+            'study_type': (request.POST.get('study_type') or 'bachelor').strip(),
+            'details': (request.POST.get('details') or '').strip(),
+        }
+        valid_types = dict(ProjectHelpRequest.STUDY_CHOICES)
+        if not (form['full_name'] and form['phone'] and form['specialization'] and form['details']):
+            form_error = 'يرجى تعبئة جميع الحقول المطلوبة.'
+        elif form['study_type'] not in valid_types:
+            form_error = 'نوع الدراسة غير صحيح.'
+        else:
+            ProjectHelpRequest.objects.create(**form)
+            submitted = True
+            form = {'full_name': '', 'phone': '', 'specialization': '', 'study_type': 'bachelor', 'details': ''}
+
+    active = list(GraduationProject.objects.filter(is_active=True))
+    groups = []
+    for key, label in GraduationProject.CATEGORY_CHOICES:
+        items = [p for p in active if p.category == key]
+        if items:
+            groups.append({'key': key, 'label': label, 'items': items})
+
+    context = _base_context(request)
+    context.update({
+        'project_groups': groups,
+        'projects_count': len(active),
+        'study_choices': ProjectHelpRequest.STUDY_CHOICES,
+        'submitted': submitted,
+        'form_error': form_error,
+        'form': form,
+    })
+    return render(request, 'store/graduation_projects.html', context)
 
 
 def robots_txt(request):

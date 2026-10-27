@@ -20,12 +20,14 @@ from .models import (
     Customer,
     DownloadableFile,
     EducationalVideo,
+    GraduationProject,
     Order,
     OrderItem,
     PhoneOTP,
     PosDevice,
     PosEvent,
     Product,
+    ProjectHelpRequest,
     ProductImage,
     ProductReview,
     PushSubscription,
@@ -62,6 +64,8 @@ def _badge_count_for_model(object_name):
         return SaleReservation.objects.filter(status='reserved').count()
     if object_name == 'PhoneOTP':
         return PhoneOTP.objects.filter(is_used=False).count()
+    if object_name == 'ProjectHelpRequest':
+        return ProjectHelpRequest.objects.filter(status='new').count()
     return 0
 
 
@@ -73,6 +77,7 @@ _ADMIN_GROUPS = [
     ('🧾 المبيعات والزبائن', ['Order', 'SaleReservation', 'Customer']),
     ('⭐ تفاعل الزبائن', ['Review', 'PushSubscription', 'PhoneOTP']),
     ('🎓 المحتوى التعليمي', ['Course', 'EducationalVideo', 'DownloadableFile']),
+    ('🎓 مشاريع التخرّج', ['GraduationProject', 'ProjectHelpRequest']),
     ('🎨 واجهة الموقع', ['SiteSettings', 'SiteSection', 'TeamMember']),
     ('🔄 المزامنة وإصدارات البرنامج', ['PosDevice', 'PosEvent', 'AppRelease']),
     ('👤 المستخدمون والصلاحيات', ['User', 'Group']),
@@ -940,6 +945,29 @@ class TeamMemberAdmin(admin.ModelAdmin):
     list_display = ('name', 'role', 'phone', 'order', 'is_active')
     list_editable = ('order', 'is_active')
     search_fields = ('name', 'role', 'bio', 'phone')
+
+
+@admin.register(GraduationProject)
+class GraduationProjectAdmin(admin.ModelAdmin):
+    list_display = ('title', 'category', 'study_type', 'year', 'order', 'is_active', 'created_at')
+    list_display_links = ('title',)
+    list_editable = ('category', 'order', 'is_active')
+    list_filter = ('category', 'is_active')
+    search_fields = ('title', 'description', 'study_type')
+    fields = ('title', 'category', 'image', 'description', 'study_type', 'year', 'order', 'is_active')
+
+
+@admin.register(ProjectHelpRequest)
+class ProjectHelpRequestAdmin(admin.ModelAdmin):
+    list_display = ('full_name', 'phone', 'specialization', 'study_type', 'status', 'created_at')
+    list_editable = ('status',)
+    list_filter = ('status', 'study_type')
+    search_fields = ('full_name', 'phone', 'specialization', 'details')
+    readonly_fields = ('full_name', 'phone', 'specialization', 'study_type', 'details', 'created_at')
+    fields = ('full_name', 'phone', 'specialization', 'study_type', 'details', 'status', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(AppRelease)

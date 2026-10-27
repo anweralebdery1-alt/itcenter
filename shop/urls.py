@@ -23,6 +23,7 @@ urlpatterns = [
     path('videos/', views.videos, name='videos'),
     path('videos/<int:pk>/', views.video_detail, name='video_detail'),
     path('about/', views.about, name='about'),
+    path('graduation-projects/', views.graduation_projects, name='graduation_projects'),
     path('account/', views.account, name='account'),
     path('account/details/', views.account_details, name='account_details'),
     path('account/logout/', views.account_logout, name='account_logout'),

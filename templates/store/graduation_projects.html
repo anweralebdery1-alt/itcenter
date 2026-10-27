@@ -1,0 +1,200 @@
+{% extends 'store/base.html' %}
+{% load store_extras %}
+{% block title %}مشاريع التخرّج | {{ settings.site_name }}{% endblock %}
+{% block extra_css %}
+<style>
+  .gp-hero {
+    background: linear-gradient(135deg, var(--blue-dark, #0B3B7A), var(--blue, #0B4EA2));
+    color: #fff; border-radius: var(--radius, 16px); padding: 26px 20px; margin: 10px 0 22px;
+    position: relative; overflow: hidden;
+  }
+  .gp-hero h1 { font-size: clamp(20px, 4vw, 28px); margin: 0 0 8px; letter-spacing: -.3px; }
+  .gp-hero p { margin: 0 0 16px; opacity: .92; font-size: 14px; line-height: 1.8; max-width: 760px; }
+  .gp-hero .btn-req {
+    display: inline-flex; align-items: center; gap: 8px; background: var(--orange, #FF8A00);
+    color: #fff; font-weight: 900; border-radius: 999px; padding: 11px 22px; text-decoration: none;
+    box-shadow: 0 8px 20px rgba(255,138,0,.35);
+  }
+  .gp-hero .btn-req:active { transform: scale(.97); }
+
+  .gp-cat-title { display: flex; align-items: center; gap: 10px; margin: 26px 0 12px; }
+  .gp-cat-title .tag { width: 6px; height: 24px; border-radius: 99px; background: linear-gradient(var(--orange,#FF8A00), var(--blue,#0B4EA2)); }
+  .gp-cat-title h2 { font-size: 18px; margin: 0; }
+  .gp-cat-title .count { font-size: 12.5px; color: var(--blue,#0B4EA2); font-weight: 800; }
+
+  .gp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+  .gp-card {
+    border: 1px solid var(--line, #e6e8ee); border-radius: 14px; overflow: hidden; background: #fff;
+    cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    text-align: start; padding: 0; font-family: inherit;
+  }
+  .gp-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md, 0 10px 26px rgba(2,8,23,.12)); border-color: var(--orange,#FF8A00); }
+  .gp-thumb { aspect-ratio: 4/3; background: linear-gradient(135deg,#eaf2ff,#fff1dc); display: grid; place-items: center; }
+  .gp-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .gp-thumb .ph { font-size: 34px; opacity: .5; }
+  .gp-card-body { padding: 10px 12px 13px; }
+  .gp-card-body .t { font-weight: 800; font-size: 13.5px; color: var(--ink,#0f172a); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .gp-card-body .m { font-size: 11.5px; color: #64748b; margin-top: 4px; }
+
+  /* نافذة عرض الصورة + الوصف */
+  .gp-modal { position: fixed; inset: 0; z-index: 200; display: none; align-items: center; justify-content: center;
+    background: rgba(2,8,23,.72); padding: 18px; }
+  .gp-modal.open { display: flex; }
+  .gp-modal-box { background: #fff; border-radius: 16px; max-width: 560px; width: 100%; max-height: 90vh;
+    overflow: auto; }
+  .gp-modal-box img { width: 100%; max-height: 54vh; object-fit: contain; background: #0b1220; display: block;
+    border-radius: 16px 16px 0 0; }
+  .gp-modal-body { padding: 16px 18px 20px; }
+  .gp-modal-body h3 { margin: 0 0 6px; font-size: 18px; }
+  .gp-modal-body .cat { display: inline-block; font-size: 12px; font-weight: 800; color: var(--blue,#0B4EA2);
+    background: #eef5ff; border-radius: 999px; padding: 3px 11px; margin-bottom: 10px; }
+  .gp-modal-body p { margin: 0; color: #334155; line-height: 1.9; font-size: 14px; white-space: pre-line; }
+  .gp-modal-close { position: sticky; top: 0; float: inline-end; margin: 8px; width: 34px; height: 34px;
+    border-radius: 999px; border: 0; background: rgba(0,0,0,.5); color: #fff; font-size: 17px; cursor: pointer; }
+
+  /* فورمة الطلب */
+  .gp-form-wrap { margin: 34px 0 10px; border: 1px solid var(--line,#e6e8ee); border-radius: 18px; overflow: hidden; }
+  .gp-form-head { background: linear-gradient(135deg,#0f172a,#1e293b); color: #fff; padding: 18px 20px; }
+  .gp-form-head h2 { margin: 0 0 4px; font-size: 19px; }
+  .gp-form-head p { margin: 0; opacity: .85; font-size: 13px; }
+  .gp-form { padding: 20px; display: grid; gap: 14px; }
+  .gp-field label { display: block; font-weight: 800; font-size: 13.5px; margin-bottom: 6px; color: var(--ink,#0f172a); }
+  .gp-field input, .gp-field select, .gp-field textarea {
+    width: 100%; border: 1px solid var(--line,#e6e8ee); border-radius: 12px; padding: 12px 14px;
+    font-family: inherit; font-size: 14px; background: #fff; color: var(--ink,#0f172a);
+  }
+  .gp-field textarea { min-height: 120px; resize: vertical; }
+  .gp-field input:focus, .gp-field select:focus, .gp-field textarea:focus { outline: 2px solid var(--blue,#0B4EA2); border-color: transparent; }
+  .gp-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 560px){ .gp-row2 { grid-template-columns: 1fr; } }
+  .gp-submit { background: var(--orange,#FF8A00); color: #fff; border: 0; font-weight: 900; font-size: 15px;
+    border-radius: 12px; padding: 14px; cursor: pointer; }
+  .gp-submit:active { transform: scale(.98); }
+  .gp-alert { border-radius: 12px; padding: 13px 16px; font-weight: 700; font-size: 14px; }
+  .gp-alert.ok { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+  .gp-alert.err { background: #fef2f2; color: #b42318; border: 1px solid #fecaca; }
+  .gp-empty { text-align: center; color: #64748b; padding: 30px; border: 1px dashed var(--line,#e6e8ee); border-radius: 14px; }
+</style>
+{% endblock %}
+{% block content %}
+<main class="container-wide mt-4">
+
+  <section class="gp-hero">
+    <h1>مساعدة في مشاريع التخرّج</h1>
+    <p>ننفّذ ونساعد في مشاريع التخرّج لمختلف الاختصاصات — أجهزة طبية، حاسبات، إلكترونيات، اتصالات، ميكاترونكس وغيرها.
+      تصفّح نماذج من مشاريع أنجزناها سابقاً، ثم قدّم طلبك لنتواصل معك ونعرض عليك تفاصيل الخدمة وأجورها.</p>
+    <a class="btn-req" href="#request">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      طلب مساعدة في مشروع
+    </a>
+  </section>
+
+  {% for group in project_groups %}
+    <div class="gp-cat-title">
+      <span class="tag"></span>
+      <h2>{{ group.label }}</h2>
+      <span class="count">({{ group.items|length }})</span>
+    </div>
+    <div class="gp-grid">
+      {% for p in group.items %}
+        <button type="button" class="gp-card"
+                data-title="{{ p.title }}" data-cat="{{ group.label }}"
+                data-desc="{{ p.description }}"
+                data-img="{% if p.image %}{{ p.image.url }}{% endif %}">
+          <div class="gp-thumb">
+            {% if p.image %}<img src="{{ p.image.url }}" alt="{{ p.title }}" loading="lazy" decoding="async">{% else %}<span class="ph">🎓</span>{% endif %}
+          </div>
+          <div class="gp-card-body">
+            <div class="t">{{ p.title }}</div>
+            {% if p.study_type or p.year %}<div class="m">{{ p.study_type }}{% if p.study_type and p.year %} · {% endif %}{{ p.year }}</div>{% endif %}
+          </div>
+        </button>
+      {% endfor %}
+    </div>
+  {% empty %}
+    <div class="gp-empty">سنضيف نماذج من مشاريعنا المنجزة قريباً. يمكنك تقديم طلبك الآن وسنتواصل معك.</div>
+  {% endfor %}
+
+  <section class="gp-form-wrap" id="request">
+    <div class="gp-form-head">
+      <h2>تقديم طلب مساعدة في مشروع</h2>
+      <p>املأ الحقول التالية وسنتواصل معك لعرض تفاصيل الخدمة وأجورها.</p>
+    </div>
+    <form class="gp-form" method="post" action="{% url 'graduation_projects' %}#request">
+      {% csrf_token %}
+      {% if submitted %}<div class="gp-alert ok">✓ تم استلام طلبك بنجاح، سنتواصل معك قريباً.</div>{% endif %}
+      {% if form_error %}<div class="gp-alert err">{{ form_error }}</div>{% endif %}
+      <div class="gp-row2">
+        <div class="gp-field">
+          <label for="full_name">الاسم</label>
+          <input id="full_name" name="full_name" value="{{ form.full_name }}" required placeholder="الاسم الكامل">
+        </div>
+        <div class="gp-field">
+          <label for="phone">رقم الهاتف</label>
+          <input id="phone" name="phone" value="{{ form.phone }}" required placeholder="07XXXXXXXXX" inputmode="tel">
+        </div>
+      </div>
+      <div class="gp-row2">
+        <div class="gp-field">
+          <label for="specialization">الاختصاص</label>
+          <input id="specialization" name="specialization" value="{{ form.specialization }}" required placeholder="مثل: هندسة طبية، علوم حاسوب…">
+        </div>
+        <div class="gp-field">
+          <label for="study_type">نوع الدراسة</label>
+          <select id="study_type" name="study_type">
+            {% for value, label in study_choices %}
+              <option value="{{ value }}" {% if form.study_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="gp-field">
+        <label for="details">تفاصيل المشروع</label>
+        <textarea id="details" name="details" required placeholder="اكتب فكرة المشروع، المتطلبات، الموعد النهائي، وأي تفاصيل تساعدنا على تقديم عرض دقيق.">{{ form.details }}</textarea>
+      </div>
+      <button type="submit" class="gp-submit">إرسال الطلب</button>
+    </form>
+  </section>
+</main>
+
+<div class="gp-modal" id="gpModal" aria-hidden="true">
+  <div class="gp-modal-box">
+    <button type="button" class="gp-modal-close" id="gpModalClose" aria-label="إغلاق">✕</button>
+    <img id="gpModalImg" src="" alt="">
+    <div class="gp-modal-body">
+      <span class="cat" id="gpModalCat"></span>
+      <h3 id="gpModalTitle"></h3>
+      <p id="gpModalDesc"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var modal = document.getElementById('gpModal');
+    var mImg = document.getElementById('gpModalImg');
+    var mTitle = document.getElementById('gpModalTitle');
+    var mCat = document.getElementById('gpModalCat');
+    var mDesc = document.getElementById('gpModalDesc');
+    function open(card) {
+      var img = card.getAttribute('data-img');
+      if (img) { mImg.src = img; mImg.style.display = 'block'; } else { mImg.style.display = 'none'; }
+      mTitle.textContent = card.getAttribute('data-title') || '';
+      mCat.textContent = card.getAttribute('data-cat') || '';
+      mDesc.textContent = card.getAttribute('data-desc') || 'لا يوجد وصف مضاف لهذا المشروع.';
+      modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false');
+    }
+    function close() { modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); mImg.src = ''; }
+    document.querySelectorAll('.gp-card').forEach(function (c) {
+      c.addEventListener('click', function () { open(c); });
+    });
+    document.getElementById('gpModalClose').addEventListener('click', close);
+    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    {% if submitted %}
+      var r = document.getElementById('request'); if (r) r.scrollIntoView();
+    {% endif %}
+  })();
+</script>
+{% endblock %}
