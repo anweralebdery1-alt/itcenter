@@ -33,6 +33,8 @@ MAX_PUSH_EVENTS = 1000
 SUPPORTED_ENTITIES = {
     'product', 'stock_move', 'sale', 'withdrawal',
     'salary', 'expense', 'transfer', 'user',
+    # مشاريع الأوفلاين: تُخزَّن وتُمرَّر بين الحاسبتين فقط (لا نموذج لها على السيرفر)
+    'project', 'project_payment',
 }
 
 
