@@ -755,8 +755,13 @@ def send_admin_push(title, body, url='/admin/'):
     if not private_pem:
         return
     try:
-        from pywebpush import webpush, WebPushException
+        from pywebpush import webpush
+        from py_vapid import Vapid
+        # نمرّر كائن Vapid محمّلاً من PEM: تمرير نص PEM مباشرة يجعل py_vapid يحاول
+        # فكّه كمفتاح خام/DER فيفشل كل إرسال بصمت ("ASN.1 parsing error").
+        vapid = Vapid.from_pem(private_pem.encode())
     except Exception:
+        logger.exception('web push: could not load VAPID key')
         return
     import json
     claims = {'sub': getattr(settings, 'VAPID_SUBJECT', 'mailto:admin@example.com')}
@@ -767,7 +772,7 @@ def send_admin_push(title, body, url='/admin/'):
                 subscription_info={'endpoint': sub.endpoint,
                                    'keys': {'p256dh': sub.p256dh, 'auth': sub.auth}},
                 data=payload,
-                vapid_private_key=private_pem,
+                vapid_private_key=vapid,
                 vapid_claims=dict(claims),
             )
         except Exception as e:
@@ -776,7 +781,7 @@ def send_admin_push(title, body, url='/admin/'):
             if status in (404, 410):
                 sub.delete()
             else:
-                print('web push error:', e)
+                logger.warning('web push error for %s: %s', sub.pk, e)
 
 
 @ensure_csrf_cookie

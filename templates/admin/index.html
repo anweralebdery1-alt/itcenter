@@ -33,10 +33,68 @@
 <div id="content-main">
   <div id="push-banner" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;
        background:linear-gradient(135deg,#0B3B7A,#0B4EA2);color:#fff;border-radius:12px;padding:14px 16px;margin:0 0 16px;">
-    <div style="font-size:13.5px;font-weight:600;">🔔 <b>إشعارات الطلبات</b> — فعّلها على هذا الجهاز لتصلك عند كل طلب جديد.</div>
-    <a href="{% url 'push_page' %}" style="background:#FF8A00;color:#fff;font-weight:800;font-size:13px;
-       text-decoration:none;border-radius:999px;padding:9px 18px;white-space:nowrap;">تفعيل الإشعارات على هذا الجهاز ←</a>
+    <div id="push-text" style="font-size:13.5px;font-weight:600;line-height:1.7;">🔔 <b>إشعارات الطلبات</b> — فعّلها على هذا الجهاز لتصلك عند كل طلب جديد.</div>
+    <button type="button" id="push-enable" style="background:#FF8A00;color:#fff;font-weight:800;font-size:13px;border:0;
+       cursor:pointer;border-radius:999px;padding:9px 18px;white-space:nowrap;font-family:inherit;">تفعيل الإشعارات على هذا الجهاز</button>
   </div>
+  <script>
+    /* تفعيل الإشعارات بضغطة واحدة من هنا مباشرة — نطلب الإذن أولاً داخل الضغطة (شرط آبل) */
+    (function () {
+      var KEY = "{{ vapid_public_key|escapejs }}";
+      var btn = document.getElementById('push-enable');
+      var txt = document.getElementById('push-text');
+      function say(html) { txt.innerHTML = html; }
+      function b64ToUint8(s) {
+        var b = (s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+        var raw = atob(b), out = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+      }
+      if (!KEY) { btn.style.display = 'none'; say('⚠️ الإشعارات غير مهيّأة على الخادم.'); return; }
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        btn.style.display = 'none';
+        say('📱 على الآيفون: افتح الموقع من <b>أيقونة الشاشة الرئيسية</b> (لا من Safari)، سجّل دخول الأدمن، ثم اضغط التفعيل هنا.');
+        return;
+      }
+      // هل هذا الجهاز مشترك أصلاً؟
+      navigator.serviceWorker.getRegistration('/').then(function (reg) {
+        if (!reg) return;
+        return reg.pushManager.getSubscription().then(function (s) {
+          if (s && Notification.permission === 'granted') {
+            say('✅ <b>الإشعارات مفعّلة على هذا الجهاز</b> — ستصلك عند كل طلب جديد.');
+            btn.textContent = 'إعادة التفعيل';
+          }
+        });
+      }).catch(function () {});
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        Notification.requestPermission().then(function (perm) {
+          if (perm !== 'granted') throw new Error('لم تُمنح صلاحية الإشعارات — فعّلها من إعدادات الهاتف ← الإشعارات.');
+          return navigator.serviceWorker.register('/push-sw.js');
+        }).then(function () {
+          return navigator.serviceWorker.ready;
+        }).then(function (reg) {
+          return reg.pushManager.getSubscription().then(function (s) {
+            return s || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToUint8(KEY) });
+          });
+        }).then(function (sub) {
+          return fetch('/push/subscribe/', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify(sub)
+          });
+        }).then(function (res) {
+          if (!res.ok) throw new Error('تعذّر حفظ الاشتراك (' + res.status + ').');
+          say('✅ <b>تم تفعيل الإشعارات على هذا الجهاز.</b>');
+          btn.textContent = 'إعادة التفعيل';
+          btn.disabled = false;
+        }).catch(function (e) {
+          say('⚠️ ' + e.message);
+          btn.disabled = false;
+        });
+      });
+    })();
+  </script>
   {% if store_stats %}
   <div id="store-dashboard" class="module">
     <h2 class="sd-title">📊 نظرة عامة على المتجر</h2>

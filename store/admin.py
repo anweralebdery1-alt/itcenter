@@ -168,6 +168,9 @@ def _index_with_stats(request, extra_context=None):
         extra_context['store_stats'] = _dashboard_stats()
     except Exception:
         logger.exception('dashboard stats computation failed')
+    # لتفعيل الإشعارات بضغطة واحدة من شريط الأدمن (المفتاح العام ليس سرّاً)
+    from django.conf import settings as _settings
+    extra_context['vapid_public_key'] = getattr(_settings, 'VAPID_PUBLIC_KEY', '')
     return _orig_index(request, extra_context)
 
 
