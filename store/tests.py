@@ -212,6 +212,24 @@ class PosSyncTests(TestCase):
             '/api/pos/push/', data=json.dumps({'events': events}),
             content_type='application/json', **self._auth(device))
 
+    def test_product_sku_event_changes_only_the_sku(self):
+        """إعادة ترتيب الحافظات: يتغيّر SKU وحده، ويبقى اسم الموقع وأسعاره كما هي،
+        ويصل الحدث للحاسبة الأخرى."""
+        from .models import Product
+        product = Product.objects.create(name='اسم الموقع المنقّح', sku='137',
+                                         buy_price=5000, sell_price=8000, quantity=3)
+        uid = str(product.uuid)
+        response = self._push(self.device_a, [self._event('product_sku', 'update', uid, {
+            'uuid': uid, 'sku': '324', 'old_sku': '137', 'updated_at': '2026-10-31T10:00:00.000Z'})])
+        self.assertEqual(response.json()['accepted'].__len__(), 1)
+        product.refresh_from_db()
+        self.assertEqual(product.sku, '324')
+        self.assertEqual(product.name, 'اسم الموقع المنقّح')
+        self.assertEqual((product.buy_price, product.sell_price), (5000, 8000))
+
+        pulled = self.client.get('/api/pos/pull/', {'since': 0}, **self._auth(self.device_b)).json()
+        self.assertIn('product_sku', [e['entity'] for e in pulled['events']])
+
     def test_push_requires_a_valid_device_token(self):
         response = self.client.post('/api/pos/push/', data='{"events": []}',
                                     content_type='application/json',

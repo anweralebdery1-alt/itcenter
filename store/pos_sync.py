@@ -35,6 +35,8 @@ SUPPORTED_ENTITIES = {
     'salary', 'expense', 'transfer', 'user',
     # مشاريع الأوفلاين: تُخزَّن وتُمرَّر بين الحاسبتين فقط (لا نموذج لها على السيرفر)
     'project', 'project_payment',
+    # تغيير SKU وحده (إعادة ترتيب الحافظات) — لا يلمس الاسم ولا الأسعار
+    'product_sku',
 }
 
 
@@ -204,7 +206,20 @@ def _materialize(event):
         return _apply_product(event.payload)
     if event.entity == 'stock_move' and event.op == 'insert':
         return _apply_stock_move(event.payload)
+    if event.entity == 'product_sku':
+        return _apply_product_sku(event.payload)
     return 'relayed'
+
+
+def _apply_product_sku(payload):
+    """يغيّر SKU المنتج فقط. حدث «product» الكامل يكتب الاسم والأسعار من الأوفلاين
+    فوق أسماء الموقع المنقّحة — لذا لإعادة ترتيب الحافظات حدث مستقل ضيّق."""
+    product_uuid = payload.get('uuid')
+    if not product_uuid:
+        return 'skipped: missing uuid'
+    updated = Product.objects.filter(uuid=product_uuid).update(
+        sku=str(payload.get('sku') or '')[:100])
+    return 'updated' if updated else 'skipped: unknown product'
 
 
 # ---------------------------------------------------------------- نقاط الاتصال
