@@ -710,3 +710,22 @@ class CategoryUnifiedTreeTests(TestCase):
             apps.get_model('store', 'Series')
         self.assertFalse(
             any(f.name == 'series' for f in Product._meta.get_fields()))
+
+
+class ProductPricingTests(TestCase):
+    def setUp(self):
+        from .models import SiteSettings
+        self.settings = SiteSettings.load()
+        self.settings.usd_rate, self.settings.shipping_margin_pct, self.settings.profit_margin_pct = 1700, 30, 35
+
+    def test_product_shipping_pct_overrides_the_site_margin(self):
+        product = Product(name='x', price_usd=1.0, shipping_pct=50)
+        self.assertEqual(product.compute_prices(self.settings), (2550, 3450))
+        product.shipping_pct = None
+        self.assertEqual(product.compute_prices(self.settings), (2200, 3000))
+
+    def test_sell_floor_raises_but_never_lowers_the_sell_price(self):
+        product = Product(name='x', price_usd=1.0, shipping_pct=50, sell_floor=5000)
+        self.assertEqual(product.compute_prices(self.settings), (2550, 5000))
+        product.sell_floor = 1000
+        self.assertEqual(product.compute_prices(self.settings), (2550, 3450))

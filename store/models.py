@@ -253,6 +253,13 @@ class Product(ImageCompressMixin, models.Model):
         null=True, blank=True, verbose_name='السعر الدولاري (المصدر)',
         help_text='تكلفة المنتج بالدولار من علي إكسبريس/علي بابا. منه يُحسب سعر '
                   'الشراء والبيع تلقائياً وفق سعر الصرف والهوامش في إعدادات الموقع.')
+    shipping_pct = models.FloatField(
+        null=True, blank=True, verbose_name='هامش النقل الخاص %',
+        help_text='نسبة النقل لهذا المنتج وحده (مثلاً 50 للقطع الرخيصة و35 للغالية). '
+                  'فارغ = هامش الشحن العام في إعدادات الموقع.')
+    sell_floor = models.FloatField(
+        null=True, blank=True, verbose_name='أدنى سعر بيع',
+        help_text='سعر البيع المحسوب لا ينزل عن هذا الرقم (مثلاً سعر أردنك). فارغ = بلا حدّ.')
     buy_price = models.FloatField(default=0)
     sell_price = models.FloatField(default=0)
     quantity = models.IntegerField(default=0)
@@ -342,14 +349,21 @@ class Product(ImageCompressMixin, models.Model):
 
     def compute_prices(self, settings=None):
         """يحسب (سعر الشراء، سعر البيع) من السعر الدولاري وإعدادات الموقع.
-        سعر الشراء = الدولاري × سعر الصرف × (1 + هامش الشحن%)،
-        سعر البيع = سعر الشراء × (1 + هامش الربح%). يرجع None إن لا سعر دولاري."""
+        سعر الشراء = الدولاري × سعر الصرف × (1 + هامش النقل%)، وهامش النقل هو
+        الخاص بالمنتج إن وُجد وإلا العام. سعر البيع = سعر الشراء × (1 + هامش
+        الربح%)، ولا ينزل عن «أدنى سعر بيع». يرجع None إن لا سعر دولاري."""
         if not self.price_usd:
             return None
         s = settings or SiteSettings.load()
-        buy = self.price_usd * (s.usd_rate or 0) * (1 + (s.shipping_margin_pct or 0) / 100.0)
-        sell = buy * (1 + (s.profit_margin_pct or 0) / 100.0)
+        buy = self.price_usd * (s.usd_rate or 0) * (1 + self.effective_shipping_pct(s) / 100.0)
+        sell = max(buy * (1 + (s.profit_margin_pct or 0) / 100.0), self.sell_floor or 0)
         return self._round50(buy), self._round50(sell)
+
+    def effective_shipping_pct(self, settings=None):
+        if self.shipping_pct is not None:
+            return self.shipping_pct
+        s = settings or SiteSettings.load()
+        return s.shipping_margin_pct or 0
 
     def apply_pricing(self, settings=None, save=True):
         """يشتق سعر الشراء/البيع من السعر الدولاري ويخزّنهما. يرجع True إن طُبّق."""

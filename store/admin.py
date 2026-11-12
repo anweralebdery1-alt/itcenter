@@ -210,13 +210,13 @@ def _reconcile_price_fields(obj, form):
     يُصلح خطأ كان يعيد كتابة التعديل اليدوي من المعادلة فيضيع السعر الجديد."""
     changed = set(getattr(form, 'changed_data', None) or [])
     manual_price = bool(changed & {'buy_price', 'sell_price'})
-    if obj.price_usd and ('price_usd' in changed) and not manual_price:
+    if obj.price_usd and (changed & {'price_usd', 'shipping_pct', 'sell_floor'}) and not manual_price:
         res = obj.compute_prices()
         if res:
             obj.buy_price, obj.sell_price = res
     elif 'buy_price' in changed and obj.buy_price:
         s = SiteSettings.load()
-        denom = (s.usd_rate or 0) * (1 + (s.shipping_margin_pct or 0) / 100.0)
+        denom = (s.usd_rate or 0) * (1 + obj.effective_shipping_pct(s) / 100.0)
         if denom:
             obj.price_usd = round(obj.buy_price / denom, 4)
 
@@ -675,7 +675,8 @@ class ProductAdmin(admin.ModelAdmin):
             'fields': ('name', 'sku', 'description', 'specifications_text'),
         }),
         ('الأسعار والمخزون', {
-            'fields': ('price_usd', 'buy_price', 'aliexpress_url', 'sell_price', 'competitor_price',
+            'fields': ('price_usd', 'shipping_pct', 'buy_price', 'aliexpress_url', 'sell_price',
+                       'sell_floor', 'competitor_price',
                        'competitor_url', 'quantity', 'is_offer'),
             'description': 'اكتب السعر الدولاري فقط ويُحسب الشراء والبيع تلقائياً من سعر الصرف '
                            'والهوامش في إعدادات الموقع. سعر المنافس = أردنك أو متجر عراقي؛ لوحة '
