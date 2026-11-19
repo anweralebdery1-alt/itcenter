@@ -197,10 +197,11 @@ class SiteSettingsAdmin(admin.ModelAdmin):
                        ('tier2_max_usd', 'tier2_ship_pct', 'tier2_profit_pct'),
                        ('tier3_max_usd', 'tier3_ship_pct', 'tier3_profit_pct'),
                        ('tier4_ship_pct', 'tier4_profit_pct'),
+                       ('round_threshold', 'round_step_low', 'round_step_high'),
                        'tiers_preview'),
             'description': 'السعر الدولاري يحدّد شريحة المنتج. سعر الشراء = الدولاري × (1 + نقل الشريحة٪) × سعر الصرف. '
                            'سعر البيع = الشراء × (1 + ربح الشريحة٪)، ولا ينزل عن «أدنى سعر بيع» (سعر أردونك) إن وُجد. '
-                           'التقريب لأقرب 50. المنتج الذي كُتب فيه «هامش نقل خاص» يأخذ نسبته هو بدل الشريحة. '
+                           'سعر البيع يُقرَّب للأعلى: حتى «حدّ التقريب» بالخطوة الصغيرة، وما فوقه بالكبيرة (سعر الشراء لأقرب 50). المنتج الذي كُتب فيه «هامش نقل خاص» يأخذ نسبته هو بدل الشريحة. '
                            '⚠️ الحفظ يُعيد تسعير كل منتج له سعر دولاري فوراً.',
         }),
         ('التوصيل', {
@@ -234,7 +235,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             rng = f'أقل من {hi:g}$' if lo == 0 else (f'من {lo:g}$ إلى أقل من {hi:g}$' if hi else f'{lo:g}$ فأكثر')
             ex = (lo + hi) / 2 if hi else lo * 1.5
             buy = Product._round50(ex * rate * (1 + ship / 100.0))
-            sell = Product._round50(ex * rate * (1 + ship / 100.0) * (1 + profit / 100.0))
+            sell = obj.round_sell(ex * rate * (1 + ship / 100.0) * (1 + profit / 100.0))
             rows.append(format_html(
                 '<tr><td>{}</td><td>{}</td><td>{}%</td><td>{}%</td><td>{}$ ← شراء {} / بيع {}</td><td>{}</td></tr>',
                 i + 1, rng, f'{ship:g}', f'{profit:g}', f'{ex:g}', f'{buy:,}', f'{sell:,}', counts[i]))

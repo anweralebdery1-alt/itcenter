@@ -175,6 +175,12 @@ class SiteSettings(ImageCompressMixin, models.Model):
     tier3_profit_pct = models.FloatField(default=35, verbose_name='ربح %')
     tier4_ship_pct = models.FloatField(default=35, verbose_name='الشريحة 4 (ما فوق ذلك) — نقل %')
     tier4_profit_pct = models.FloatField(default=35, verbose_name='ربح %')
+    # ---- تقريب سعر البيع للأعلى ----
+    round_threshold = models.FloatField(
+        default=500, verbose_name='حدّ التقريب (د.ع)',
+        help_text='سعر البيع حتى هذا الرقم (ومساوٍ له) يُقرَّب للأعلى بالخطوة الصغيرة، وما فوقه بالخطوة الكبيرة.')
+    round_step_low = models.PositiveIntegerField(default=50, verbose_name='تقريب الأسعار الصغيرة لأعلى (د.ع)')
+    round_step_high = models.PositiveIntegerField(default=250, verbose_name='تقريب الأسعار الكبيرة لأعلى (د.ع)')
     delivery_fee = models.FloatField(
         default=6000, verbose_name='أجور التوصيل (د.ع)',
         help_text='تُضاف لكل طلب من الموقع — نفس المبلغ لكل المحافظات. ضع 0 لإلغائها.')
@@ -212,6 +218,15 @@ class SiteSettings(ImageCompressMixin, models.Model):
         a, b, c = self.tier1_max_usd or 0, self.tier2_max_usd or 0, self.tier3_max_usd or 0
         if not (0 < a < b < c):
             raise ValidationError('حدود الشرائح يجب أن تكون تصاعدية: الشريحة 1 < الشريحة 2 < الشريحة 3 (وأكبر من صفر).')
+
+    def round_sell(self, x):
+        """تقريب سعر البيع للأعلى: حتى الحدّ بالخطوة الصغيرة (50)، وفوقه بالكبيرة (250)."""
+        import math
+        x = round(x or 0, 6)
+        if x <= 0:
+            return 0
+        step = (self.round_step_high if x > (self.round_threshold or 0) else self.round_step_low) or 50
+        return int(math.ceil(x / step) * step)
 
     def price_tiers(self):
         """قائمة الشرائح: (من $، إلى $ أو None، نقل %، ربح %)."""
@@ -399,13 +414,14 @@ class Product(ImageCompressMixin, models.Model):
         """يحسب (سعر الشراء، سعر البيع) من السعر الدولاري وإعدادات الموقع.
         سعر الشراء = الدولاري × سعر الصرف × (1 + هامش النقل%)، وهامش النقل هو
         الخاص بالمنتج إن وُجد وإلا العام. سعر البيع = سعر الشراء × (1 + هامش
-        الربح%)، ولا ينزل عن «أدنى سعر بيع». يرجع None إن لا سعر دولاري."""
+        الربح%)، ولا ينزل عن «أدنى سعر بيع»، ويُقرَّب للأعلى (50 حتى 500، و250 فوقها).
+        يرجع None إن لا سعر دولاري."""
         if not self.price_usd:
             return None
         s = settings or SiteSettings.load()
         buy = self.price_usd * (s.usd_rate or 0) * (1 + self.effective_shipping_pct(s) / 100.0)
         sell = max(buy * (1 + self.effective_profit_pct(s) / 100.0), self.sell_floor or 0)
-        return self._round50(buy), self._round50(sell)
+        return self._round50(buy), s.round_sell(sell)
 
     def effective_shipping_pct(self, settings=None):
         """نسبة النقل: الخاصة بالمنتج إن كُتبت، وإلا حسب شريحة سعره الدولاري."""

@@ -720,9 +720,9 @@ class ProductPricingTests(TestCase):
 
     def test_product_shipping_pct_overrides_the_tier(self):
         product = Product(name='x', price_usd=1.0, shipping_pct=50)
-        self.assertEqual(product.compute_prices(self.settings), (2550, 3450))
+        self.assertEqual(product.compute_prices(self.settings), (2550, 3500))
         product.shipping_pct = None  # 1$ تقع في الشريحة 2 → نقل 45%
-        self.assertEqual(product.compute_prices(self.settings), (2450, 3350))
+        self.assertEqual(product.compute_prices(self.settings), (2450, 3500))
 
     def test_tiers_pick_shipping_and_profit_by_usd_price(self):
         s = self.settings
@@ -734,7 +734,11 @@ class ProductPricingTests(TestCase):
         self.assertEqual(s.tier_for(15), (40, 35))
         self.assertEqual(s.tier_for(25), (35, 25))
         product = Product(name='x', price_usd=25)
-        self.assertEqual(product.compute_prices(s), (57400, 71700))
+        self.assertEqual(product.compute_prices(s), (57400, 71750))
+
+    def test_sell_rounds_up_50_until_500_then_250(self):
+        r = self.settings.round_sell
+        self.assertEqual([r(0), r(120), r(480), r(500), r(501), r(1000), r(1001)], [0, 150, 500, 500, 750, 1000, 1250])
 
     def test_tier_bounds_must_ascend(self):
         from django.core.exceptions import ValidationError
@@ -753,7 +757,7 @@ class ProductPricingTests(TestCase):
         product = Product(name='x', price_usd=1.0, shipping_pct=50, sell_floor=5000)
         self.assertEqual(product.compute_prices(self.settings), (2550, 5000))
         product.sell_floor = 1000
-        self.assertEqual(product.compute_prices(self.settings), (2550, 3450))
+        self.assertEqual(product.compute_prices(self.settings), (2550, 3500))
 
 
 class OnlineOrderFlowTests(TestCase):
