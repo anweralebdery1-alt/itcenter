@@ -137,12 +137,12 @@
   .chat-contact { padding: 10px 12px; background: #fffaf2; border-top: 1px solid #ffe0b2; }
   .cc-title { font-size: 12.5px; font-weight: 700; margin-bottom: 6px; color: #6d4c00; }
   .cc-row { display: flex; gap: 6px; }
-  .cc-row input { flex: 1; min-width: 0; border: 1px solid #e3d3b5; border-radius: 10px; padding: 7px 9px; font-size: 13px; font-family: inherit; }
+  .cc-row input { flex: 1; min-width: 0; border: 1px solid #e3d3b5; border-radius: 10px; padding: 7px 9px; font-size: 16px; font-family: inherit; }
   .cc-row button { border: 0; background: var(--cw-orange); color: #fff; border-radius: 10px; padding: 0 14px; font-weight: 800; cursor: pointer; font-family: inherit; }
   .cc-skip { border: 0; background: none; color: #8a6d3b; font-size: 12px; margin-top: 4px; cursor: pointer; font-family: inherit; }
   .chat-input { display: flex; align-items: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid #eef1f5; background: #fff; }
   .chat-input textarea { flex: 1; resize: none; border: 1px solid #d6dfec; border-radius: 14px; padding: 9px 12px;
-    font-size: 14.5px; font-family: inherit; max-height: 110px; outline: none; line-height: 1.5; }
+    font-size: 16px; font-family: inherit; max-height: 110px; outline: none; line-height: 1.5; }
   .chat-input textarea:focus { border-color: var(--cw-blue); }
   .chat-input button { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer;
     background: var(--cw-blue); color: #fff; display: grid; place-items: center; }
@@ -154,8 +154,21 @@
   @media (max-width: 900px) {
     .chat-fab { bottom: 94px; right: 16px; width: 54px; height: 54px; }
     .chat-hint { bottom: 104px; right: 80px; }
-    .chat-panel { right: 8px; left: 8px; width: auto; max-width: none; bottom: 156px; height: calc(100vh - 230px); height: calc(100dvh - 230px); }
+    /* الجوال: النافذة تملأ الشاشة المرئية فقط (فوق الكيبورد) — ارتفاعها يضبطه JS من visualViewport */
+    .chat-panel { top: 0; left: 0; right: 0; bottom: auto; width: 100%; max-width: none;
+      height: 100vh; height: 100dvh; border-radius: 0; z-index: 1000; animation: none; }
+    #chat-widget.open .chat-fab, #chat-widget.open .chat-hint { display: none !important; }
+    .chat-head { padding-top: max(12px, env(safe-area-inset-top)); }
+    .chat-input { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+    .chat-msg { max-width: 88%; }
+    .chat-wa { padding: 7px; }
+    /* أثناء الكتابة (الكيبورد ظاهر) نُبقي الرسائل وحقل الكتابة فقط */
+    #chat-widget.typing .chat-chips, #chat-widget.typing .chat-contact,
+    #chat-widget.typing .chat-wa { display: none !important; }
+    #chat-widget.typing .chat-head { padding-top: 8px; padding-bottom: 8px; }
+    #chat-widget.typing .chat-title span { display: none; }
   }
+  html.cw-lock, html.cw-lock body { overflow: hidden !important; overscroll-behavior: none; }
   @media (prefers-color-scheme: dark) {
     .chat-panel { background: #1c2128; }
     .chat-body { background: #12161b; }
@@ -257,6 +270,28 @@
     }, ms);
   }
 
+  // الجوال: نطابق النافذة مع الجزء المرئي من الشاشة. عند ظهور الكيبورد يصغر
+  // visualViewport فتصغر النافذة معه ويبقى الرأس ظاهراً وحقل الكتابة فوق الكيبورد.
+  var vv = window.visualViewport;
+  function isMobile() { return window.innerWidth <= 900; }
+  function fit() {
+    if (!isOpen || !isMobile()) { panel.style.top = panel.style.height = ''; return; }
+    var h = vv ? vv.height : window.innerHeight, top = vv ? vv.offsetTop : 0;
+    panel.style.top = top + 'px';
+    panel.style.height = h + 'px';
+    scrollDown();
+  }
+  if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); }
+  window.addEventListener('resize', fit);
+  ta.addEventListener('focus', function () {
+    if (isMobile()) root.classList.add('typing');
+    setTimeout(fit, 50); setTimeout(fit, 350);
+  });
+  ta.addEventListener('blur', function () {
+    // تأخير بسيط كي لا يضيع ضغط زر الإرسال عند اختفاء الكيبورد
+    setTimeout(function () { if (document.activeElement !== ta) root.classList.remove('typing'); fit(); }, 250);
+  });
+
   function open(ctx) {
     if (ctx !== undefined && ctx) context = ctx;
     updateCtx();
@@ -265,11 +300,21 @@
     if (!loaded && hasThread) { loaded = true; lastId = 0; poll().then(scrollDown); }
     else { loaded = true; poll(); }
     setBadge(0);
-    setTimeout(function () { if (window.innerWidth > 900) ta.focus(); }, 60);
+    if (isMobile()) {
+      document.documentElement.classList.add('cw-lock');
+      // زر الرجوع في الجوال يغلق المحادثة بدل مغادرة الصفحة
+      try { if (!(history.state && history.state.cwOpen)) history.pushState({ cwOpen: 1 }, ''); } catch (e) {}
+    }
+    fit();
+    setTimeout(function () { if (!isMobile()) ta.focus(); }, 60);
     schedule();
   }
-  function close() {
+  window.addEventListener('popstate', function () { if (isOpen) close(true); });
+  function close(fromPop) {
+    if (fromPop !== true) { try { if (history.state && history.state.cwOpen) history.back(); } catch (e) {} }
     isOpen = false; root.classList.remove('open'); panel.hidden = true;
+    document.documentElement.classList.remove('cw-lock');
+    panel.style.top = panel.style.height = '';
     fab.setAttribute('aria-expanded', 'false'); schedule();
   }
   function showHint(text) {
@@ -332,6 +377,8 @@
   hint.addEventListener('click', function () { open(); });
   $('.chat-x').addEventListener('click', close);
   ctxBar.querySelector('button').addEventListener('click', function () { context = ''; updateCtx(); });
+  // زر الإرسال لا يأخذ التركيز → يبقى الكيبورد مفتوحاً لكتابة الرسالة التالية
+  sendBtn.addEventListener('pointerdown', function (e) { if (document.activeElement === ta) e.preventDefault(); });
   form.addEventListener('submit', function (e) { e.preventDefault(); var v = ta.value; ta.value = ''; ta.style.height = ''; send(v); });
   ta.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 900) { e.preventDefault(); form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit')); }

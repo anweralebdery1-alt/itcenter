@@ -46,12 +46,27 @@
   .ib-placeholder { flex: 1; display: grid; place-items: center; color: var(--body-quiet-color, #8a93a3); font-size: 15px; text-align: center; padding: 20px; }
   .ib-back { display: none; }
   @media (max-width: 800px) {
-    .inbox { grid-template-columns: 1fr; height: calc(100vh - 150px); }
+    .inbox { grid-template-columns: 1fr; height: auto; min-height: 60vh; border-radius: 10px; }
+    .ib-list { max-height: none; }
     .inbox.has-open .ib-side { display: none; }
     .inbox:not(.has-open) .ib-main { display: none; }
+    /* المحادثة المفتوحة تملأ الجزء المرئي من الشاشة (فوق الكيبورد) — يضبطها JS */
+    .inbox.has-open { position: fixed; left: 0; right: 0; top: 0; height: 100vh; height: 100dvh;
+      min-height: 0; z-index: 2000; border: 0; border-radius: 0; }
+    .ib-head { padding: 8px 10px; gap: 6px; }
+    .ib-head .who { min-width: 0; flex-basis: 40%; }
+    .ib-head .who strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ib-head .who span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ib-head a, .ib-head button { padding: 6px 9px; }
     .ib-back { display: inline-block; }
+    .ib-msgs { padding: 10px; }
     .m { max-width: 88%; }
+    .ib-form { padding: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+    .ib-form button { padding: 10px 14px; }
+    .inbox.typing .ib-quick { display: none !important; }
   }
+  html.ib-lock, html.ib-lock body { overflow: hidden !important; }
+  .ib-form textarea, .ib-tools input { font-size: 16px; }
 </style>
 {% endblock %}
 {% block content %}
@@ -148,6 +163,23 @@
   }
   function scheduleMsgs() { clearTimeout(msgTimer); msgTimer = setTimeout(function () { loadMsgs(false).then(scheduleMsgs); }, 3500); }
 
+  // الجوال: نطابق المحادثة مع الجزء المرئي من الشاشة كي لا يختفي رأسها عند ظهور الكيبورد
+  var vv = window.visualViewport;
+  function mobile() { return window.innerWidth <= 800; }
+  function fit() {
+    if (!mobile() || !box.classList.contains('has-open')) {
+      box.style.top = box.style.height = ''; document.documentElement.classList.remove('ib-lock'); return;
+    }
+    document.documentElement.classList.add('ib-lock');
+    box.style.top = (vv ? vv.offsetTop : 0) + 'px';
+    box.style.height = (vv ? vv.height : window.innerHeight) + 'px';
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); }
+  window.addEventListener('resize', fit);
+  ta.addEventListener('focus', function () { if (mobile()) box.classList.add('typing'); setTimeout(fit, 50); setTimeout(fit, 350); });
+  ta.addEventListener('blur', function () { setTimeout(function () { box.classList.remove('typing'); fit(); }, 250); });
+
   function openThread(id) {
     current = id; lastId = 0; lastDay = ''; msgs.innerHTML = '';
     box.classList.add('has-open');
@@ -155,7 +187,8 @@
     el('ib-ph').hidden = true;
     renderThreads();
     history.replaceState(null, '', base + '?t=' + id);
-    loadMsgs(true).then(function () { loadThreads(); scheduleMsgs(); });
+    fit();
+    loadMsgs(true).then(function () { loadThreads(); scheduleMsgs(); fit(); });
     if (window.innerWidth > 800) ta.focus();
   }
   function post(body) {
@@ -176,13 +209,17 @@
 
   list.addEventListener('click', function (e) { var b = e.target.closest('.ib-item'); if (b) openThread(parseInt(b.dataset.id, 10)); });
   form.addEventListener('submit', function (e) { e.preventDefault(); reply(ta.value); });
+  form.querySelector('button[type=submit]').addEventListener('pointerdown', function (e) { if (document.activeElement === ta) e.preventDefault(); });
   ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); reply(ta.value); } });
   el('ib-quick').addEventListener('click', function (e) { var b = e.target.closest('[data-q]'); if (b) { ta.value = b.dataset.q; ta.focus(); } });
   el('ib-close').addEventListener('click', function () {
     var closed = this.dataset.closed === '1';
     post({ action: closed ? 'reopen' : 'close' }).then(function () { loadMsgs(false); loadThreads(); });
   });
-  el('ib-back').addEventListener('click', function () { box.classList.remove('has-open'); current = null; clearTimeout(msgTimer); loadThreads(); });
+  el('ib-back').addEventListener('click', function () {
+    box.classList.remove('has-open'); current = null; clearTimeout(msgTimer); fit();
+    history.replaceState(null, '', base); loadThreads();
+  });
   var qTimer; el('ib-q').addEventListener('input', function () { clearTimeout(qTimer); qTimer = setTimeout(loadThreads, 300); });
   el('ib-show').addEventListener('change', loadThreads);
 

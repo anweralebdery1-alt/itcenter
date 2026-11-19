@@ -912,15 +912,16 @@ class OrderAdmin(admin.ModelAdmin):
     list_filter = ('status', 'payment_method', 'province', 'created_at')
     search_fields = ('full_name', 'phone', 'uuid', 'id')
     list_per_page = 50
-    readonly_fields = ('uuid', 'created_at', 'subtotal', 'delivery_fee', 'total',
+    readonly_fields = ('uuid', 'created_at', 'subtotal', 'total',
                        'prepared_at', 'pos_receipt_no', 'payment_method')
     fieldsets = (
-        ('حالة الطلب', {'fields': ('status',)}),
+        ('حالة الطلب', {'fields': ('status', 'delivery_fee'),
+                        'description': 'تعديل أجور التوصيل يُعيد حساب الإجمالي عند الحفظ.'}),
         ('بيانات الزبون والتوصيل', {
             'fields': (('full_name', 'phone'), ('province', 'address')),
             'classes': ('collapse',)}),
         ('تفاصيل', {
-            'fields': (('subtotal', 'delivery_fee', 'total'), 'payment_method',
+            'fields': (('subtotal', 'total'), 'payment_method',
                        ('prepared_at', 'pos_receipt_no'), ('uuid', 'created_at')),
             'classes': ('collapse',)}),
     )
@@ -990,6 +991,11 @@ class OrderAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         previous = (Order.objects.filter(pk=obj.pk).values_list('status', flat=True).first()
                     if change else None)
+        if change:
+            # الإجمالي = المواد + التوصيل دائماً (الطلبات القديمة بلا subtotal تُحسب من موادها)
+            obj.subtotal = obj.items_subtotal
+            obj.delivery_fee = max(0.0, float(obj.delivery_fee or 0))
+            obj.total = obj.subtotal + obj.delivery_fee
         super().save_model(request, obj, form, change)
         if change and obj.status == 'cancelled' and previous != 'cancelled':
             from django.contrib import messages
