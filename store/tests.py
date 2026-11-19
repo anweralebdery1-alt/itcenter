@@ -716,13 +716,38 @@ class ProductPricingTests(TestCase):
     def setUp(self):
         from .models import SiteSettings
         self.settings = SiteSettings.load()
-        self.settings.usd_rate, self.settings.shipping_margin_pct, self.settings.profit_margin_pct = 1700, 30, 35
+        self.settings.usd_rate = 1700
 
-    def test_product_shipping_pct_overrides_the_site_margin(self):
+    def test_product_shipping_pct_overrides_the_tier(self):
         product = Product(name='x', price_usd=1.0, shipping_pct=50)
         self.assertEqual(product.compute_prices(self.settings), (2550, 3450))
-        product.shipping_pct = None
-        self.assertEqual(product.compute_prices(self.settings), (2200, 3000))
+        product.shipping_pct = None  # 1$ تقع في الشريحة 2 → نقل 45%
+        self.assertEqual(product.compute_prices(self.settings), (2450, 3350))
+
+    def test_tiers_pick_shipping_and_profit_by_usd_price(self):
+        s = self.settings
+        self.assertEqual(s.tier_for(0.5), (50, 35))
+        self.assertEqual(s.tier_for(2.99), (45, 35))
+        self.assertEqual(s.tier_for(3), (40, 35))
+        self.assertEqual(s.tier_for(25), (35, 35))
+        s.tier3_max_usd, s.tier4_profit_pct = 20, 25
+        self.assertEqual(s.tier_for(15), (40, 35))
+        self.assertEqual(s.tier_for(25), (35, 25))
+        product = Product(name='x', price_usd=25)
+        self.assertEqual(product.compute_prices(s), (57400, 71700))
+
+    def test_tier_bounds_must_ascend(self):
+        from django.core.exceptions import ValidationError
+        self.settings.tier2_max_usd = 0.5
+        with self.assertRaises(ValidationError):
+            self.settings.clean()
+
+    def test_usd_from_buy_inverts_the_tier_formula(self):
+        s = self.settings
+        for usd in (0.4, 2.0, 5.0, 30.0):
+            buy = usd * 1700 * (1 + s.tier_for(usd)[0] / 100.0)
+            self.assertAlmostEqual(s.usd_from_buy(buy), usd, places=3)
+        self.assertAlmostEqual(s.usd_from_buy(2550, 50), 1.0, places=3)
 
     def test_sell_floor_raises_but_never_lowers_the_sell_price(self):
         product = Product(name='x', price_usd=1.0, shipping_pct=50, sell_floor=5000)

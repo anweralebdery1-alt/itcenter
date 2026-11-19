@@ -12,6 +12,7 @@ from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from .models import (
     MAX_PRODUCT_IMAGES,
     AppRelease,
@@ -190,11 +191,17 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         ('معلومات التواصل', {
             'fields': (('phone', 'phone_label'), ('phone2', 'phone2_label'), 'whatsapp', 'address'),
             'description': 'يظهر العنوان ورقما الهاتفين في أعلى الموقع على الجوال.'}),
-        ('التسعير التلقائي', {
-            'fields': ('usd_rate', 'shipping_margin_pct', 'profit_margin_pct'),
-            'description': 'سعر الشراء = السعر الدولاري × سعر الصرف × (1 + هامش الشحن٪). '
-                           'سعر البيع = سعر الشراء × (1 + هامش الربح٪). '
-                           'أي تعديل هنا يُعيد تسعير كل منتج له سعر دولاري فوراً عند الحفظ.',
+        ('التسعير التلقائي — سعر الصرف وشرائح النقل والربح', {
+            'fields': ('usd_rate',
+                       ('tier1_max_usd', 'tier1_ship_pct', 'tier1_profit_pct'),
+                       ('tier2_max_usd', 'tier2_ship_pct', 'tier2_profit_pct'),
+                       ('tier3_max_usd', 'tier3_ship_pct', 'tier3_profit_pct'),
+                       ('tier4_ship_pct', 'tier4_profit_pct'),
+                       'tiers_preview'),
+            'description': 'السعر الدولاري يحدّد شريحة المنتج. سعر الشراء = الدولاري × (1 + نقل الشريحة٪) × سعر الصرف. '
+                           'سعر البيع = الشراء × (1 + ربح الشريحة٪)، ولا ينزل عن «أدنى سعر بيع» (سعر أردونك) إن وُجد. '
+                           'التقريب لأقرب 50. المنتج الذي كُتب فيه «هامش نقل خاص» يأخذ نسبته هو بدل الشريحة. '
+                           '⚠️ الحفظ يُعيد تسعير كل منتج له سعر دولاري فوراً.',
         }),
         ('التوصيل', {
             'fields': ('delivery_fee',),
@@ -205,6 +212,37 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             'description': 'إعدادات تساعد على ظهور المتجر في نتائج بحث جوجل بسرعة.',
         }),
     )
+
+    readonly_fields = ('tiers_preview',)
+
+    @admin.display(description='الشرائح الحالية (بعد الحفظ)')
+    def tiers_preview(self, obj):
+        if not obj or not obj.pk:
+            return '—'
+        rate = obj.usd_rate or 0
+        rows = []
+        tiers = obj.price_tiers()
+        counts = [0] * len(tiers)
+        priced = Product.objects.filter(deleted_at__isnull=True, price_usd__gt=0)
+        fixed = priced.exclude(shipping_pct=None).count()
+        for usd in priced.filter(shipping_pct=None).values_list('price_usd', flat=True):
+            for i, (lo, hi, _, _) in enumerate(tiers):
+                if hi is None or usd < hi:
+                    counts[i] += 1
+                    break
+        for i, (lo, hi, ship, profit) in enumerate(tiers):
+            rng = f'أقل من {hi:g}$' if lo == 0 else (f'من {lo:g}$ إلى أقل من {hi:g}$' if hi else f'{lo:g}$ فأكثر')
+            ex = (lo + hi) / 2 if hi else lo * 1.5
+            buy = Product._round50(ex * rate * (1 + ship / 100.0))
+            sell = Product._round50(ex * rate * (1 + ship / 100.0) * (1 + profit / 100.0))
+            rows.append(format_html(
+                '<tr><td>{}</td><td>{}</td><td>{}%</td><td>{}%</td><td>{}$ ← شراء {} / بيع {}</td><td>{}</td></tr>',
+                i + 1, rng, f'{ship:g}', f'{profit:g}', f'{ex:g}', f'{buy:,}', f'{sell:,}', counts[i]))
+        head = ('<table style="border-collapse:collapse;font-size:13px" cellpadding="6" border="1">'
+                '<tr style="background:#f3f6fa"><th>#</th><th>السعر الدولاري</th><th>النقل</th>'
+                '<th>الربح</th><th>مثال</th><th>منتجات تتبعها</th></tr>')
+        note = format_html('<div style="margin-top:6px;color:#b45309">{} منتجاً لها «هامش نقل خاص» ثابت ولا تتبع شرائح النقل (لكنها تتبع ربح الشريحة).</div>', fixed) if fixed else ''
+        return format_html('{}{}</table>{}', mark_safe(head), mark_safe(''.join(rows)), note)
 
     def has_add_permission(self, request):
         return not SiteSettings.objects.exists()
@@ -223,10 +261,9 @@ def _reconcile_price_fields(obj, form):
         if res:
             obj.buy_price, obj.sell_price = res
     elif 'buy_price' in changed and obj.buy_price:
-        s = SiteSettings.load()
-        denom = (s.usd_rate or 0) * (1 + obj.effective_shipping_pct(s) / 100.0)
-        if denom:
-            obj.price_usd = round(obj.buy_price / denom, 4)
+        usd = SiteSettings.load().usd_from_buy(obj.buy_price, obj.shipping_pct)
+        if usd:
+            obj.price_usd = usd
 
 
 class CategoryAdminForm(forms.ModelForm):

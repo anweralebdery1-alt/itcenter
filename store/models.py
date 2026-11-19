@@ -160,12 +160,21 @@ class SiteSettings(ImageCompressMixin, models.Model):
     usd_rate = models.FloatField(
         default=1600, verbose_name='سعر صرف الدولار (دينار لكل دولار)',
         help_text='كم ديناراً يساوي الدولار الواحد. منه يُحوَّل السعر الدولاري إلى سعر الشراء.')
-    shipping_margin_pct = models.FloatField(
-        default=30, verbose_name='هامش الشحن %',
-        help_text='نسبة تُضاف فوق التكلفة الدولارية لتغطية الشحن. مثال: 30 تعني +‏%30.')
-    profit_margin_pct = models.FloatField(
-        default=35, verbose_name='هامش الربح %',
-        help_text='نسبة الربح فوق سعر الشراء لتحديد سعر البيع. مثال: 35 تعني +‏%35.')
+    # قديمة — لم تعد تُستعمل في الحساب (حلّت محلها الشرائح أدناه)، تبقى للأرشفة فقط
+    shipping_margin_pct = models.FloatField(default=30, editable=False, verbose_name='هامش الشحن القديم %')
+    profit_margin_pct = models.FloatField(default=35, editable=False, verbose_name='هامش الربح القديم %')
+    # ---- شرائح التسعير حسب السعر الدولاري: لكل شريحة نسبة نقل ونسبة ربح ----
+    tier1_max_usd = models.FloatField(default=1, verbose_name='الشريحة 1 — أقل من ($)')
+    tier1_ship_pct = models.FloatField(default=50, verbose_name='نقل %')
+    tier1_profit_pct = models.FloatField(default=35, verbose_name='ربح %')
+    tier2_max_usd = models.FloatField(default=3, verbose_name='الشريحة 2 — أقل من ($)')
+    tier2_ship_pct = models.FloatField(default=45, verbose_name='نقل %')
+    tier2_profit_pct = models.FloatField(default=35, verbose_name='ربح %')
+    tier3_max_usd = models.FloatField(default=10, verbose_name='الشريحة 3 — أقل من ($)')
+    tier3_ship_pct = models.FloatField(default=40, verbose_name='نقل %')
+    tier3_profit_pct = models.FloatField(default=35, verbose_name='ربح %')
+    tier4_ship_pct = models.FloatField(default=35, verbose_name='الشريحة 4 (ما فوق ذلك) — نقل %')
+    tier4_profit_pct = models.FloatField(default=35, verbose_name='ربح %')
     delivery_fee = models.FloatField(
         default=6000, verbose_name='أجور التوصيل (د.ع)',
         help_text='تُضاف لكل طلب من الموقع — نفس المبلغ لكل المحافظات. ضع 0 لإلغائها.')
@@ -197,6 +206,42 @@ class SiteSettings(ImageCompressMixin, models.Model):
         else:
             d = d[:10]
         return d if d.startswith('964') else '964' + d
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        a, b, c = self.tier1_max_usd or 0, self.tier2_max_usd or 0, self.tier3_max_usd or 0
+        if not (0 < a < b < c):
+            raise ValidationError('حدود الشرائح يجب أن تكون تصاعدية: الشريحة 1 < الشريحة 2 < الشريحة 3 (وأكبر من صفر).')
+
+    def price_tiers(self):
+        """قائمة الشرائح: (من $، إلى $ أو None، نقل %، ربح %)."""
+        return [
+            (0, self.tier1_max_usd, self.tier1_ship_pct or 0, self.tier1_profit_pct or 0),
+            (self.tier1_max_usd, self.tier2_max_usd, self.tier2_ship_pct or 0, self.tier2_profit_pct or 0),
+            (self.tier2_max_usd, self.tier3_max_usd, self.tier3_ship_pct or 0, self.tier3_profit_pct or 0),
+            (self.tier3_max_usd, None, self.tier4_ship_pct or 0, self.tier4_profit_pct or 0),
+        ]
+
+    def tier_for(self, usd):
+        """(نقل %، ربح %) للسعر الدولاري المعطى."""
+        for lo, hi, ship, profit in self.price_tiers():
+            if hi is None or (usd or 0) < hi:
+                return ship, profit
+        return self.tier4_ship_pct or 0, self.tier4_profit_pct or 0
+
+    def usd_from_buy(self, buy, ship_override=None):
+        """عكس المعادلة: السعر الدولاري الذي يعطي سعر الشراء هذا. مع الشرائح نجرّب كل
+        شريحة ونأخذ التي يقع الناتج داخل حدودها."""
+        rate = self.usd_rate or 0
+        if not rate or not buy:
+            return None
+        if ship_override is not None:
+            return round(buy / (rate * (1 + ship_override / 100.0)), 4)
+        for lo, hi, ship, _ in self.price_tiers():
+            usd = buy / (rate * (1 + ship / 100.0))
+            if usd >= (lo or 0) and (hi is None or usd < hi):
+                return round(usd, 4)
+        return round(buy / (rate * (1 + (self.tier4_ship_pct or 0) / 100.0)), 4)
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
@@ -258,8 +303,8 @@ class Product(ImageCompressMixin, models.Model):
                   'الشراء والبيع تلقائياً وفق سعر الصرف والهوامش في إعدادات الموقع.')
     shipping_pct = models.FloatField(
         null=True, blank=True, verbose_name='هامش النقل الخاص %',
-        help_text='نسبة النقل لهذا المنتج وحده (مثلاً 50 للقطع الرخيصة و35 للغالية). '
-                  'فارغ = هامش الشحن العام في إعدادات الموقع.')
+        help_text='اتركه فارغاً ليتبع شرائح النقل في إعدادات الموقع (حسب سعره الدولاري). '
+                  'اكتب رقماً فقط إن أردت نسبة ثابتة لهذا المنتج وحده لا تتغيّر مع الشرائح.')
     sell_floor = models.FloatField(
         null=True, blank=True, verbose_name='أدنى سعر بيع',
         help_text='سعر البيع المحسوب لا ينزل عن هذا الرقم (مثلاً سعر أردنك). فارغ = بلا حدّ.')
@@ -359,14 +404,19 @@ class Product(ImageCompressMixin, models.Model):
             return None
         s = settings or SiteSettings.load()
         buy = self.price_usd * (s.usd_rate or 0) * (1 + self.effective_shipping_pct(s) / 100.0)
-        sell = max(buy * (1 + (s.profit_margin_pct or 0) / 100.0), self.sell_floor or 0)
+        sell = max(buy * (1 + self.effective_profit_pct(s) / 100.0), self.sell_floor or 0)
         return self._round50(buy), self._round50(sell)
 
     def effective_shipping_pct(self, settings=None):
+        """نسبة النقل: الخاصة بالمنتج إن كُتبت، وإلا حسب شريحة سعره الدولاري."""
         if self.shipping_pct is not None:
             return self.shipping_pct
         s = settings or SiteSettings.load()
-        return s.shipping_margin_pct or 0
+        return s.tier_for(self.price_usd)[0]
+
+    def effective_profit_pct(self, settings=None):
+        s = settings or SiteSettings.load()
+        return s.tier_for(self.price_usd)[1]
 
     def apply_pricing(self, settings=None, save=True):
         """يشتق سعر الشراء/البيع من السعر الدولاري ويخزّنهما. يرجع True إن طُبّق."""
