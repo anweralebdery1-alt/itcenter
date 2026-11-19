@@ -1,0 +1,97 @@
+{% extends "admin/change_form.html" %}
+{% load store_extras %}
+
+{% block extrastyle %}{{ block.super }}
+<style>
+  .inv { background: var(--body-bg, #fff); border: 1px solid var(--hairline-color, #e6e9ee); border-radius: 14px;
+    padding: 20px 22px; margin: 0 0 18px; box-shadow: 0 2px 10px rgba(16,24,40,.06); max-width: 980px; }
+  .inv-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-start;
+    border-bottom: 2px dashed var(--hairline-color, #e6e9ee); padding-bottom: 14px; margin-bottom: 14px; }
+  .inv-title { font-size: 22px; font-weight: 800; margin: 0; color: var(--body-fg, #1b2838); }
+  .inv-sub { color: var(--body-quiet-color, #6b7685); font-size: 13px; margin-top: 4px; }
+  .inv-status { display: inline-block; padding: 5px 14px; border-radius: 999px; font-weight: 800; font-size: 13px; }
+  .inv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 18px; margin-bottom: 16px; }
+  .inv-field { font-size: 13.5px; line-height: 1.6; }
+  .inv-field b { display: block; font-size: 11.5px; color: var(--body-quiet-color, #6b7685); font-weight: 700; }
+  .inv-field a { font-weight: 700; }
+  table.inv-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .inv-table th { background: var(--darkened-bg, #f3f6fa); padding: 9px 10px; text-align: right; font-size: 12.5px;
+    color: var(--body-quiet-color, #5b6675); border-bottom: 1px solid var(--hairline-color, #e6e9ee); }
+  .inv-table td { padding: 9px 10px; border-bottom: 1px solid var(--hairline-color, #eef1f5); vertical-align: middle; }
+  .inv-table .n { text-align: center; white-space: nowrap; }
+  .inv-table .m { text-align: left; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .inv-table .sku { display: inline-block; background: #fff4e5; color: #b45309; border-radius: 6px; padding: 1px 7px;
+    font-weight: 800; font-size: 12px; }
+  .inv-table tfoot td { border: 0; padding: 6px 10px; }
+  .inv-table tfoot .grand td { font-size: 18px; font-weight: 800; border-top: 2px solid var(--body-fg, #1b2838); padding-top: 10px; }
+  .inv-table tfoot .grand .m { color: #1b7a3d; }
+  .inv-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .inv-actions a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 10px;
+    font-weight: 800; text-decoration: none; font-size: 13.5px; }
+  .inv-btn-print { background: #0B4EA2; color: #fff !important; }
+  .inv-btn-wa { background: #25D366; color: #fff !important; }
+  .inv-btn-call { background: var(--darkened-bg, #f3f6fa); color: var(--body-fg, #1b2838) !important; border: 1px solid var(--hairline-color, #e6e9ee); }
+  .inv-note { margin-top: 12px; font-size: 12.5px; color: var(--body-quiet-color, #6b7685); }
+</style>
+{% endblock %}
+
+{% block object-tools-items %}
+  {% if order %}
+  <li><a href="{% url 'admin:store_order_invoice' order.pk %}?print=1" target="_blank">🖨️ طباعة الفاتورة</a></li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}
+
+{% block form_top %}
+{% if order %}
+<div class="inv">
+  <div class="inv-head">
+    <div>
+      <h2 class="inv-title">🧾 فاتورة طلب #{{ order.id }}</h2>
+      <div class="inv-sub">{{ order.created_at|date:"Y-m-d H:i" }} · {{ order.get_payment_method_display }}</div>
+    </div>
+    <span class="inv-status" style="background:{{ status_bg }};color:{{ status_fg }}">{{ order.get_status_display }}</span>
+  </div>
+
+  <div class="inv-grid">
+    <div class="inv-field"><b>الزبون</b>{{ order.full_name }}</div>
+    <div class="inv-field"><b>الهاتف</b><a href="tel:{{ order.phone }}" dir="ltr">{{ order.phone }}</a></div>
+    <div class="inv-field"><b>المحافظة</b>{{ order.province }}</div>
+    <div class="inv-field"><b>العنوان</b>{{ order.address }}</div>
+    {% if order.pos_receipt_no %}<div class="inv-field"><b>وصل البرنامج</b>{{ order.pos_receipt_no }} · {{ order.prepared_at|date:"Y-m-d H:i" }}</div>{% endif %}
+  </div>
+
+  <table class="inv-table">
+    <thead><tr><th style="width:36px">ت</th><th>المادة</th><th class="n">الحافظة</th><th class="n">العدد</th><th class="m">السعر</th><th class="m">المجموع</th></tr></thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td class="n">{{ forloop.counter }}</td>
+        <td>{% if it.product %}<a href="{% url 'admin:store_product_change' it.product.pk %}" target="_blank">{{ it.product_name }}</a>{% else %}{{ it.product_name }}{% endif %}</td>
+        <td class="n">{% with sku=it.product.sku|default:it.product_sku %}{% if sku %}<span class="sku">{{ sku }}</span>{% else %}—{% endif %}{% endwith %}</td>
+        <td class="n"><b>{{ it.quantity }}</b></td>
+        <td class="m">{{ it.price|money }}</td>
+        <td class="m"><b>{{ it.line_total|money }}</b></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="n">لا توجد مواد</td></tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><td colspan="3"></td><td class="n">{{ qty_total }} قطعة</td><td class="m">مجموع المواد</td><td class="m">{{ subtotal|money }}</td></tr>
+      <tr><td colspan="4"></td><td class="m">🚚 أجور التوصيل</td><td class="m">{% if order.delivery_fee %}{{ order.delivery_fee|money }}{% else %}—{% endif %}</td></tr>
+      <tr class="grand"><td colspan="4"></td><td class="m">الإجمالي (د.ع)</td><td class="m">{{ order.total|money }}</td></tr>
+    </tfoot>
+  </table>
+
+  <div class="inv-actions">
+    <a class="inv-btn-print" href="{% url 'admin:store_order_invoice' order.pk %}?print=1" target="_blank">🖨️ طباعة الفاتورة</a>
+    {% with ph=order.phone|cut:" " %}
+    <a class="inv-btn-wa" target="_blank" rel="noopener" href="https://wa.me/964{{ ph|slice:'-10:' }}?text={{ 'مرحباً '|urlencode }}{{ order.full_name|urlencode }}{{ '، بخصوص طلبك رقم #'|urlencode }}{{ order.id }}{{ ' من '|urlencode }}{{ site.site_name|urlencode }}">💬 واتساب الزبون</a>
+    <a class="inv-btn-call" href="tel:{{ order.phone }}">📞 اتصال</a>
+    {% endwith %}
+  </div>
+  <div class="inv-note">💡 عند الضغط على «تجهيز» في برنامج الأوفلاين يتحول الطلب إلى وصل بيع رسمي، وتصبح حالته «تم التجهيز». إلغاء الطلب من هنا يُعيد مواده للمخزون تلقائياً.</div>
+</div>
+{% endif %}
+{% endblock %}

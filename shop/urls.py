@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
 
-from store import views
+from store import chat, views
 from store.sitemaps import SITEMAPS
 
 
@@ -42,6 +42,8 @@ urlpatterns = [
     path('checkout/details/', views.checkout_details, name='checkout_details'),
     path('order/<int:order_id>/success/', views.order_success, name='order_success'),
     path('order/<int:order_id>/payment/', views.payment_redirect, name='payment_redirect'),
+    path('chat/state/', chat.chat_state, name='chat_state'),
+    path('chat/send/', chat.chat_send, name='chat_send'),
     path('api/', include('store.api_urls')),
 ]
 

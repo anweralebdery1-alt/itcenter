@@ -7,6 +7,7 @@ urlpatterns = [
     path('pos/ping/', pos_sync.pos_ping, name='api_pos_ping'),
     path('pos/version/', pos_sync.pos_version, name='api_pos_version'),
     path('pos/orders_count/', pos_sync.pos_orders_count, name='api_pos_orders_count'),
+    path('pos/orders/', pos_sync.pos_orders, name='api_pos_orders'),
 
     # واجهة المتجر للقراءة فقط — لا تكشف سعر الشراء
     path('products/', api_views.products_list, name='api_products'),

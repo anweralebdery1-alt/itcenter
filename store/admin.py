@@ -16,6 +16,8 @@ from .models import (
     MAX_PRODUCT_IMAGES,
     AppRelease,
     Category,
+    ChatMessage,
+    ChatThread,
     Course,
     CourseLecture,
     CourseMedia,
@@ -64,6 +66,8 @@ def _admin_badge(count):
 def _badge_count_for_model(object_name):
     if object_name == 'Order':
         return Order.objects.filter(status='pending').count()
+    if object_name == 'ChatThread':
+        return ChatThread.objects.filter(admin_unread__gt=0).count()
     if object_name == 'SaleReservation':
         return SaleReservation.objects.filter(status='reserved').count()
     if object_name == 'PhoneOTP':
@@ -80,7 +84,7 @@ _default_get_app_list = admin.site.get_app_list
 # تصنيف قوائم لوحة التحكم في مجموعات عربية مرتّبة (أسماء كلاسات النماذج)
 _ADMIN_GROUPS = [
     ('🛒 المنتجات والمخزون', ['Product', 'ProductReview', 'Category', 'StockMove']),
-    ('🧾 المبيعات والزبائن', ['Order', 'SaleReservation', 'Customer']),
+    ('🧾 المبيعات والزبائن', ['Order', 'ChatThread', 'SaleReservation', 'Customer']),
     ('⭐ تفاعل الزبائن', ['Review', 'PushSubscription', 'PhoneOTP']),
     ('🎓 المحتوى التعليمي', ['Course', 'CourseRegistration', 'CourseReview', 'EducationalVideo', 'DownloadableFile']),
     ('🎓 مشاريع التخرّج', ['GraduationProject', 'ProjectHelpRequest']),
@@ -138,7 +142,7 @@ def _dashboard_stats():
     inv_sell = P.aggregate(v=Sum(F('sell_price') * F('quantity'), output_field=FloatField()))['v'] or 0
     orders_total = Order.objects.count()
     orders_pending = Order.objects.filter(status='pending').count()
-    sales_total = Order.objects.filter(status__in=['confirmed', 'paid']).aggregate(v=Sum('total'))['v'] or 0
+    sales_total = Order.objects.filter(status__in=['confirmed', 'prepared', 'paid']).aggregate(v=Sum('total'))['v'] or 0
     customers = Customer.objects.count()
     reviews_pending = Review.objects.filter(is_approved=False).count()
     return [
@@ -191,6 +195,10 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             'description': 'سعر الشراء = السعر الدولاري × سعر الصرف × (1 + هامش الشحن٪). '
                            'سعر البيع = سعر الشراء × (1 + هامش الربح٪). '
                            'أي تعديل هنا يُعيد تسعير كل منتج له سعر دولاري فوراً عند الحفظ.',
+        }),
+        ('التوصيل', {
+            'fields': ('delivery_fee',),
+            'description': 'مبلغ ثابت يُضاف لكل طلب من الموقع لكل المحافظات، ويظهر للزبون في السلة.',
         }),
         ('تحسين محركات البحث (SEO)', {
             'fields': ('meta_description', 'meta_keywords', 'google_site_verification'),
@@ -885,20 +893,153 @@ class CustomerAdmin(admin.ModelAdmin):
     search_fields = ('full_name', 'phone', 'province')
 
 
-class OrderItemInline(admin.TabularInline):
-    model = OrderItem
-    extra = 0
-    readonly_fields = ('product', 'product_sku', 'product_name', 'price', 'quantity', 'line_total')
-    can_delete = False
+_ORDER_STATUS_COLORS = {
+    'pending': ('#fff4e5', '#b45309'),
+    'confirmed': ('#e8f1ff', '#0B4EA2'),
+    'prepared': ('#e7f6ec', '#1b7a3d'),
+    'paid': ('#e3f7f5', '#0f766e'),
+    'cancelled': ('#fdecea', '#b71c1c'),
+}
 
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'full_name', 'phone', 'province', 'payment_method', 'status', 'total', 'created_at')
-    list_filter = ('payment_method', 'status', 'province', 'created_at')
-    search_fields = ('full_name', 'phone', 'uuid')
-    readonly_fields = ('uuid', 'created_at')
-    inlines = (OrderItemInline,)
+    """الطلب يُعرض كفاتورة مرتّبة: مادة · عدد · سعر · مجموع، ثم التوصيل والإجمالي."""
+    change_form_template = 'admin/store/order/change_form.html'
+    list_display = ('order_no', 'full_name', 'phone', 'province', 'items_count', 'total_display',
+                    'status_badge', 'created_at', 'invoice_link')
+    list_display_links = ('order_no', 'full_name')
+    list_filter = ('status', 'payment_method', 'province', 'created_at')
+    search_fields = ('full_name', 'phone', 'uuid', 'id')
+    list_per_page = 50
+    readonly_fields = ('uuid', 'created_at', 'subtotal', 'delivery_fee', 'total',
+                       'prepared_at', 'pos_receipt_no', 'payment_method')
+    fieldsets = (
+        ('حالة الطلب', {'fields': ('status',)}),
+        ('بيانات الزبون والتوصيل', {
+            'fields': (('full_name', 'phone'), ('province', 'address')),
+            'classes': ('collapse',)}),
+        ('تفاصيل', {
+            'fields': (('subtotal', 'delivery_fee', 'total'), 'payment_method',
+                       ('prepared_at', 'pos_receipt_no'), ('uuid', 'created_at')),
+            'classes': ('collapse',)}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(_items=Count('items'))
+
+    @admin.display(description='رقم', ordering='id')
+    def order_no(self, obj):
+        return f'#{obj.id}'
+
+    @admin.display(description='المواد', ordering='_items')
+    def items_count(self, obj):
+        return getattr(obj, '_items', None) or obj.items.count()
+
+    @admin.display(description='الإجمالي', ordering='total')
+    def total_display(self, obj):
+        return format_html('<b>{}</b> د.ع', _fmt_iqd(obj.total))
+
+    @admin.display(description='الحالة', ordering='status')
+    def status_badge(self, obj):
+        bg, fg = _ORDER_STATUS_COLORS.get(obj.status, ('#eee', '#333'))
+        return format_html('<span style="background:{};color:{};padding:3px 10px;border-radius:999px;'
+                           'font-weight:700;font-size:12px;white-space:nowrap">{}</span>',
+                           bg, fg, obj.get_status_display())
+
+    @admin.display(description='الفاتورة')
+    def invoice_link(self, obj):
+        return format_html('<a class="button" style="padding:4px 10px;border-radius:8px;white-space:nowrap" '
+                           'href="{}">🧾 عرض</a>', reverse('admin:store_order_change', args=[obj.pk]))
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path('<int:pk>/invoice/', self.admin_site.admin_view(self.invoice_view),
+                 name='store_order_invoice'),
+        ]
+        return custom + urls
+
+    def _invoice_context(self, order):
+        settings_obj = SiteSettings.load()
+        items = list(order.items.select_related('product'))
+        bg, fg = _ORDER_STATUS_COLORS.get(order.status, ('#eee', '#333'))
+        return {
+            'order': order, 'items': items, 'site': settings_obj,
+            'subtotal': order.items_subtotal,
+            'qty_total': sum(int(i.quantity or 0) for i in items),
+            'status_bg': bg, 'status_fg': fg,
+        }
+
+    def invoice_view(self, request, pk):
+        order = Order.objects.filter(pk=pk).first()
+        if not order:
+            from django.http import Http404
+            raise Http404
+        context = self._invoice_context(order)
+        context['autoprint'] = request.GET.get('print') == '1'
+        return TemplateResponse(request, 'admin/store/order/invoice_print.html', context)
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        order = Order.objects.filter(pk=object_id).first()
+        if order:
+            extra_context.update(self._invoice_context(order))
+        return super().change_view(request, object_id, form_url, extra_context)
+
+    def save_model(self, request, obj, form, change):
+        previous = (Order.objects.filter(pk=obj.pk).values_list('status', flat=True).first()
+                    if change else None)
+        super().save_model(request, obj, form, change)
+        if change and obj.status == 'cancelled' and previous != 'cancelled':
+            from django.contrib import messages
+            if previous == 'prepared':
+                messages.warning(request, 'هذا الطلب جُهّز في البرنامج ووصله صادر — ألغِ الوصل من '
+                                          'البرنامج لتعود المواد للمخزون.')
+            else:
+                from .pos_sync import release_online_order_moves
+                moves = release_online_order_moves(obj, note_suffix=' (من لوحة الإدارة)')
+                if moves:
+                    messages.success(request, f'أُعيدت مواد الطلب للمخزون ({len(moves)} مادة) '
+                                              'وستصل للحاسبتين عند المزامنة.')
+
+
+@admin.register(ChatThread)
+class ChatThreadAdmin(admin.ModelAdmin):
+    """صندوق المحادثات: قائمة المحادثات بجانب المحادثة المفتوحة، يتحدّث تلقائياً."""
+    change_list_template = 'admin/store/chatthread/inbox.html'
+    list_display = ('__str__', 'phone', 'admin_unread', 'last_message_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def get_urls(self):
+        from . import chat
+        wrap = self.admin_site.admin_view
+        custom = [
+            path('api/threads/', wrap(chat.admin_threads), name='store_chat_threads'),
+            path('api/<int:pk>/messages/', wrap(chat.admin_messages), name='store_chat_messages'),
+            path('api/<int:pk>/reply/', wrap(chat.admin_reply), name='store_chat_reply'),
+        ]
+        return custom + super().get_urls()
+
+    def changelist_view(self, request, extra_context=None):
+        settings_obj = SiteSettings.load()
+        context = dict(self.admin_site.each_context(request))
+        context.update({
+            'title': 'المحادثات',
+            'opts': self.model._meta,
+            'wa_intl': settings_obj.whatsapp_intl,
+            'open_thread': request.GET.get('t', ''),
+            'quick_replies': [
+                'أهلاً بك، نعم المنتج متوفر ✅',
+                'المنتج غير متوفر حالياً، نقدر نوفّره لك خلال أيام إن رغبت.',
+                f'أجور التوصيل {_fmt_iqd(settings_obj.delivery_fee)} د.ع لكل المحافظات، والدفع عند الاستلام.',
+                'تم تجهيز طلبك وسيصلك خلال 1–3 أيام 🚚',
+                'تفضّل، كيف نقدر نساعدك؟',
+            ],
+        })
+        return TemplateResponse(request, self.change_list_template, context)
 
 
 @admin.register(PhoneOTP)

@@ -1,0 +1,363 @@
+{% load store_extras %}
+{% comment %}
+  نافذة التواصل العائمة: دردشة مباشرة مع المتجر + واتساب كبديل.
+  أي عنصر عليه data-chat-open يفتحها، و data-chat-context يربط السؤال بمنتج/طلب.
+{% endcomment %}
+<div id="chat-widget" data-has-thread="{{ chat_has_thread|yesno:'1,0' }}"
+     data-wa="{{ settings.whatsapp_intl }}" data-fee="{{ settings.delivery_fee|default:0|floatformat:0 }}"
+     data-csrf="{{ csrf_token }}" data-state-url="{% url 'chat_state' %}" data-send-url="{% url 'chat_send' %}">
+  <button type="button" class="chat-fab" aria-label="تواصل معنا" aria-expanded="false">
+    <svg class="ico-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.9-.9L3 20.5l1.6-4.6A8.4 8.4 0 0 1 3.5 11.5 8.5 8.5 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/><circle cx="8.5" cy="11.5" r=".6" fill="currentColor"/><circle cx="12" cy="11.5" r=".6" fill="currentColor"/><circle cx="15.5" cy="11.5" r=".6" fill="currentColor"/></svg>
+    <svg class="ico-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    <span class="chat-badge" hidden>0</span>
+  </button>
+  <div class="chat-hint" hidden>💬 عندك سؤال؟ كلّمنا هنا</div>
+
+  <section class="chat-panel" role="dialog" aria-label="محادثة مع المتجر" hidden>
+    <header class="chat-head">
+      <div class="chat-avatar">IT</div>
+      <div class="chat-title">
+        <strong>{{ settings.site_name|default:"مركز آي تي" }}</strong>
+        <span><i class="dot"></i> نرد عليك هنا عادةً خلال دقائق</span>
+      </div>
+      <button type="button" class="chat-x" aria-label="إغلاق">✕</button>
+    </header>
+
+    <div class="chat-body" aria-live="polite">
+      <div class="chat-msg them welcome">أهلاً بك في {{ settings.site_name|default:"المتجر" }} 👋<br>اكتب سؤالك عن أي منتج أو طلب وسنرد عليك هنا، أو اختر من الأسئلة السريعة.</div>
+    </div>
+
+    <div class="chat-ctx" hidden><span></span><button type="button" aria-label="إزالة">✕</button></div>
+
+    <div class="chat-chips">
+      <button type="button" data-chip="product" hidden>❓ هل هذا المنتج متوفر؟</button>
+      <button type="button" data-chip="delivery">🚚 أجور التوصيل</button>
+      <button type="button" data-chip="order">📦 حالة طلبي</button>
+      <button type="button" data-chip="project">🛠️ مساعدة بمشروع</button>
+      <button type="button" data-chip="price">💰 أريد سعر جملة</button>
+    </div>
+
+    <form class="chat-contact" hidden>
+      <div class="cc-title">📱 اترك رقمك لنرد عليك عبر واتساب إذا خرجت من الموقع (اختياري)</div>
+      <div class="cc-row">
+        <input name="name" placeholder="الاسم" maxlength="60" autocomplete="name">
+        <input name="phone" placeholder="07XX XXX XXXX" inputmode="tel" maxlength="20" dir="ltr" autocomplete="tel">
+        <button type="submit">حفظ</button>
+      </div>
+      <button type="button" class="cc-skip">لاحقاً</button>
+    </form>
+
+    <form class="chat-input">
+      <textarea rows="1" maxlength="1000" placeholder="اكتب رسالتك…" aria-label="رسالتك"></textarea>
+      <button type="submit" aria-label="إرسال">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.99.99 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" transform="scale(-1,1) translate(-24,0)"/></svg>
+      </button>
+    </form>
+    {% if settings.whatsapp_intl %}
+    <a class="chat-wa" target="_blank" rel="noopener" href="https://wa.me/{{ settings.whatsapp_intl }}">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.625.712.227 1.36.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347M12.05 21.785h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.885-9.885 9.885M20.52 3.449C18.24 1.245 15.24 0 12.045 0 5.463 0 .104 5.359.101 11.892c0 2.096.546 4.142 1.588 5.945L0 24l6.335-1.652a11.882 11.882 0 005.71 1.454h.006c6.585 0 11.946-5.359 11.949-11.945a11.821 11.821 0 00-3.48-8.408"/></svg>
+      تفضّل واتساب؟ تواصل معنا هناك
+    </a>
+    {% endif %}
+  </section>
+</div>
+
+<style>
+  #chat-widget { --cw-blue: var(--blue, #0B4EA2); --cw-orange: var(--orange, #FF8A00); }
+  .chat-fab {
+    position: fixed; z-index: 60; bottom: 24px; right: 20px; width: 58px; height: 58px;
+    border-radius: 50%; border: 0; cursor: pointer; color: #fff; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--cw-orange), #ff6a00);
+    box-shadow: 0 10px 26px rgba(255,120,0,.45); transition: transform .15s ease;
+  }
+  .chat-fab:active { transform: scale(.9); }
+  .chat-fab svg { width: 30px; height: 30px; }
+  .chat-fab .ico-close { display: none; width: 24px; height: 24px; }
+  #chat-widget.open .chat-fab .ico-chat { display: none; }
+  #chat-widget.open .chat-fab .ico-close { display: block; }
+  .chat-fab:not(.seen)::after {
+    content: ""; position: absolute; inset: -6px; border-radius: 50%;
+    border: 3px solid var(--cw-orange); opacity: 0; animation: cwpulse 2.4s ease-out 1.5s 3;
+  }
+  @keyframes cwpulse { 0% { opacity: .7; transform: scale(.85); } 100% { opacity: 0; transform: scale(1.35); } }
+  .chat-badge {
+    position: absolute; top: -4px; left: -4px; min-width: 22px; height: 22px; padding: 0 6px;
+    border-radius: 999px; background: #d32f2f; color: #fff; font-size: 12px; font-weight: 900;
+    display: grid; place-items: center; border: 2px solid #fff;
+  }
+  .chat-hint {
+    position: fixed; z-index: 59; bottom: 36px; right: 88px; background: #fff; color: #1b2838;
+    padding: 8px 14px; border-radius: 14px; font-weight: 800; font-size: 13.5px;
+    box-shadow: 0 6px 20px rgba(2,8,23,.18); animation: cwin .3s ease; cursor: pointer;
+  }
+  .chat-panel {
+    position: fixed; z-index: 61; bottom: 94px; right: 20px; width: 370px; max-width: calc(100vw - 32px);
+    height: min(580px, calc(100vh - 130px)); background: #fff; border-radius: 18px;
+    box-shadow: 0 18px 50px rgba(2,8,23,.28); display: flex; flex-direction: column; overflow: hidden;
+    animation: cwin .2s ease;
+  }
+  .chat-panel[hidden], .chat-hint[hidden], .chat-badge[hidden], .chat-ctx[hidden], .chat-contact[hidden] { display: none !important; }
+  @keyframes cwin { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .chat-head {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px; color: #fff;
+    background: linear-gradient(135deg, var(--blue-dark, #07356f), var(--cw-blue));
+  }
+  .chat-avatar { width: 40px; height: 40px; border-radius: 50%; background: #fff; color: var(--cw-blue);
+    display: grid; place-items: center; font-weight: 900; flex: none; }
+  .chat-title { flex: 1; display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
+  .chat-title strong { font-size: 15px; }
+  .chat-title span { font-size: 12px; opacity: .9; }
+  .chat-title .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; margin-left: 3px; }
+  .chat-x { background: rgba(255,255,255,.15); border: 0; color: #fff; width: 32px; height: 32px; border-radius: 10px; cursor: pointer; }
+  .chat-body { flex: 1; overflow-y: auto; padding: 14px 12px; background: #f3f6fa; display: flex; flex-direction: column; gap: 8px; }
+  .chat-msg { max-width: 82%; padding: 9px 12px; border-radius: 16px; font-size: 14px; line-height: 1.6;
+    white-space: pre-wrap; word-wrap: break-word; animation: cwin .18s ease; }
+  .chat-msg.them { align-self: flex-start; background: #fff; color: #1b2838; border-top-right-radius: 4px;
+    box-shadow: 0 1px 2px rgba(2,8,23,.08); }
+  .chat-msg.me { align-self: flex-end; background: var(--cw-blue); color: #fff; border-top-left-radius: 4px; }
+  .chat-msg.bot { background: #fff8ec; border: 1px solid #ffe0b2; }
+  .chat-msg .t { display: block; font-size: 10.5px; opacity: .65; margin-top: 3px; text-align: left; }
+  .chat-msg.pending { opacity: .6; }
+  .chat-msg.failed { background: #fdecea; color: #b71c1c; }
+  .chat-msg a { color: inherit; font-weight: 800; text-decoration: underline; }
+  .chat-day { align-self: center; font-size: 11px; color: #7a8594; background: #e6ebf2; padding: 2px 10px; border-radius: 999px; }
+  .chat-typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; background: #fff; border-radius: 16px; }
+  .chat-typing i { width: 7px; height: 7px; border-radius: 50%; background: #9aa5b4; animation: cwdot 1s infinite; }
+  .chat-typing i:nth-child(2) { animation-delay: .15s; } .chat-typing i:nth-child(3) { animation-delay: .3s; }
+  @keyframes cwdot { 0%,80%,100% { transform: translateY(0); opacity: .5; } 40% { transform: translateY(-4px); opacity: 1; } }
+  .chat-ctx { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: #eef4ff; font-size: 12.5px; color: var(--cw-blue); border-top: 1px solid #dde6f5; }
+  .chat-ctx span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+  .chat-ctx button { border: 0; background: none; color: inherit; cursor: pointer; }
+  .chat-chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 10px; background: #fff; border-top: 1px solid #eef1f5; scrollbar-width: none; }
+  .chat-chips::-webkit-scrollbar { display: none; }
+  .chat-chips button { flex: none; border: 1px solid #d6dfec; background: #fff; color: #1b2838; border-radius: 999px;
+    padding: 6px 12px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .chat-chips button:hover { border-color: var(--cw-orange); color: var(--cw-orange); }
+  .chat-chips button[hidden] { display: none; }
+  .chat-contact { padding: 10px 12px; background: #fffaf2; border-top: 1px solid #ffe0b2; }
+  .cc-title { font-size: 12.5px; font-weight: 700; margin-bottom: 6px; color: #6d4c00; }
+  .cc-row { display: flex; gap: 6px; }
+  .cc-row input { flex: 1; min-width: 0; border: 1px solid #e3d3b5; border-radius: 10px; padding: 7px 9px; font-size: 13px; font-family: inherit; }
+  .cc-row button { border: 0; background: var(--cw-orange); color: #fff; border-radius: 10px; padding: 0 14px; font-weight: 800; cursor: pointer; font-family: inherit; }
+  .cc-skip { border: 0; background: none; color: #8a6d3b; font-size: 12px; margin-top: 4px; cursor: pointer; font-family: inherit; }
+  .chat-input { display: flex; align-items: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid #eef1f5; background: #fff; }
+  .chat-input textarea { flex: 1; resize: none; border: 1px solid #d6dfec; border-radius: 14px; padding: 9px 12px;
+    font-size: 14.5px; font-family: inherit; max-height: 110px; outline: none; line-height: 1.5; }
+  .chat-input textarea:focus { border-color: var(--cw-blue); }
+  .chat-input button { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer;
+    background: var(--cw-blue); color: #fff; display: grid; place-items: center; }
+  .chat-input button:disabled { opacity: .5; }
+  .chat-input button svg { width: 20px; height: 20px; }
+  .chat-wa { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px; font-size: 13px;
+    font-weight: 800; color: #128c4b; background: #effaf3; text-decoration: none; border-top: 1px solid #d8f0e1; }
+  .chat-wa svg { width: 18px; height: 18px; }
+  @media (max-width: 900px) {
+    .chat-fab { bottom: 94px; right: 16px; width: 54px; height: 54px; }
+    .chat-hint { bottom: 104px; right: 80px; }
+    .chat-panel { right: 8px; left: 8px; width: auto; max-width: none; bottom: 156px; height: calc(100vh - 230px); height: calc(100dvh - 230px); }
+  }
+  @media (prefers-color-scheme: dark) {
+    .chat-panel { background: #1c2128; }
+    .chat-body { background: #12161b; }
+    .chat-msg.them { background: #262c35; color: #e6e9ee; }
+    .chat-msg.bot { background: #3a2f1c; border-color: #5c4520; color: #f3e3c3; }
+    .chat-chips, .chat-input { background: #1c2128; border-color: #2c333d; }
+    .chat-chips button { background: #262c35; color: #e6e9ee; border-color: #38414d; }
+    .chat-input textarea { background: #12161b; color: #e6e9ee; border-color: #38414d; }
+    .chat-hint { background: #262c35; color: #e6e9ee; }
+    .chat-day { background: #262c35; color: #9aa5b4; }
+  }
+</style>
+
+<script>
+(function () {
+  var root = document.getElementById('chat-widget');
+  if (!root) return;
+  var $ = function (s) { return root.querySelector(s); };
+  var fab = $('.chat-fab'), panel = $('.chat-panel'), body = $('.chat-body'), badge = $('.chat-badge');
+  var hint = $('.chat-hint'), form = $('.chat-input'), ta = form.querySelector('textarea');
+  var sendBtn = form.querySelector('button'), contact = $('.chat-contact'), ctxBar = $('.chat-ctx');
+  var waBase = root.dataset.wa ? 'https://wa.me/' + root.dataset.wa : '';
+  var waLink = $('.chat-wa');
+  var fee = parseInt(root.dataset.fee || '0', 10);
+  var hasThread = root.dataset.hasThread === '1';
+  var lastId = 0, timer = null, isOpen = false, loaded = false, lastDay = '';
+  var context = '';      // سياق السؤال: منتج/طلب
+  var pageCtx = document.getElementById('chat-page-context');
+  if (pageCtx) context = pageCtx.dataset.ctx || '';
+
+  function ss(k, v) { try { if (v === undefined) return sessionStorage.getItem(k); sessionStorage.setItem(k, v); } catch (e) { return null; } }
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function fmt(n) { return (n || 0).toLocaleString('en-US'); }
+  function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  function linkify(s) { return esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
+  function scrollDown() { body.scrollTop = body.scrollHeight; }
+
+  function addMsg(text, who, opts) {
+    opts = opts || {};
+    if (opts.date && opts.date !== lastDay) {
+      lastDay = opts.date;
+      var d = document.createElement('div'); d.className = 'chat-day'; d.textContent = opts.date; body.appendChild(d);
+    }
+    var el = document.createElement('div');
+    el.className = 'chat-msg ' + (who === 'me' ? 'me' : 'them') + (opts.bot ? ' bot' : '');
+    el.innerHTML = (opts.html ? text : linkify(text)) + (opts.at ? '<span class="t">' + opts.at + '</span>' : '');
+    body.appendChild(el); scrollDown();
+    return el;
+  }
+  function showTyping(ms) {
+    var t = document.createElement('div'); t.className = 'chat-typing'; t.innerHTML = '<i></i><i></i><i></i>';
+    body.appendChild(t); scrollDown();
+    return new Promise(function (res) { setTimeout(function () { t.remove(); res(); }, ms || 700); });
+  }
+  function setBadge(n) { badge.textContent = n; badge.hidden = !(n > 0); }
+  function updateCtx() {
+    ctxBar.hidden = !context;
+    if (context) ctxBar.querySelector('span').textContent = '📌 ' + context;
+    var chip = root.querySelector('[data-chip="product"]');
+    if (chip) chip.hidden = !(pageCtx && context && context === pageCtx.dataset.ctx);
+    if (waLink && waBase) {
+      var msg = 'مرحباً، ' + (context ? context + '\n' + location.href : 'لدي استفسار عن منتجات المتجر');
+      waLink.href = waBase + '?text=' + encodeURIComponent(msg);
+    }
+  }
+
+  function ingest(list) {
+    (list || []).forEach(function (m) {
+      if (m.id <= lastId) return;
+      lastId = m.id;
+      addMsg(m.text, m.from === 'customer' ? 'me' : 'them', { at: m.at, date: m.date, bot: m.auto });
+    });
+  }
+
+  function poll() {
+    var url = root.dataset.stateUrl + '?after=' + lastId + (isOpen ? '&open=1' : '');
+    return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || d.status !== 'ok') return;
+      if (d.thread) hasThread = true;
+      if (isOpen) { ingest(d.messages); setBadge(0); }
+      else {
+        // النافذة مغلقة: نعدّ الردود الجديدة فقط ولا نرسمها الآن
+        if (d.messages && d.messages.length) {
+          if (loaded) ingest(d.messages); else lastId = 0;
+        }
+        setBadge(d.unread || 0);
+        if (d.unread > 0 && !ss('cwToastShown' + lastId)) { showHint('📩 وصلك رد من المتجر — اضغط للقراءة'); ss('cwToastShown' + lastId, '1'); }
+      }
+      if (d.thread && !d.has_contact && isOpen && !ls('cwContactSkip') && !ls('cwContactDone')) contact.hidden = false;
+    }).catch(function () {});
+  }
+  function schedule() {
+    clearTimeout(timer);
+    if (!hasThread && !isOpen) return;
+    var ms = isOpen ? 4000 : 30000;
+    timer = setTimeout(function () {
+      if (document.hidden) { schedule(); return; }
+      poll().then(schedule);
+    }, ms);
+  }
+
+  function open(ctx) {
+    if (ctx !== undefined && ctx) context = ctx;
+    updateCtx();
+    isOpen = true; root.classList.add('open'); panel.hidden = false; hint.hidden = true;
+    fab.classList.add('seen'); fab.setAttribute('aria-expanded', 'true'); ls('cwSeen', '1');
+    if (!loaded && hasThread) { loaded = true; lastId = 0; poll().then(scrollDown); }
+    else { loaded = true; poll(); }
+    setBadge(0);
+    setTimeout(function () { if (window.innerWidth > 900) ta.focus(); }, 60);
+    schedule();
+  }
+  function close() {
+    isOpen = false; root.classList.remove('open'); panel.hidden = true;
+    fab.setAttribute('aria-expanded', 'false'); schedule();
+  }
+  function showHint(text) {
+    if (isOpen) return;
+    hint.textContent = text; hint.hidden = false;
+    clearTimeout(hint._t); hint._t = setTimeout(function () { hint.hidden = true; }, 9000);
+  }
+
+  function send(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    var full = text;
+    if (context && ss('cwCtxSent') !== context) full = '📌 ' + context + '\n' + text;
+    var el = addMsg(full, 'me'); el.classList.add('pending');
+    sendBtn.disabled = true;
+    fetch(root.dataset.sendUrl, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': root.dataset.csrf },
+      body: JSON.stringify({ text: full, page: location.pathname })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      sendBtn.disabled = false;
+      if (!d || d.status !== 'ok') { el.classList.remove('pending'); el.classList.add('failed'); el.title = (d && d.error) || ''; addMsg('⚠️ ' + ((d && d.error) || 'تعذر الإرسال، حاول مجدداً'), 'them', { bot: true }); return; }
+      el.remove();
+      hasThread = true;
+      if (context) ss('cwCtxSent', context);
+      var msgs = d.messages || [];
+      ingest(msgs.slice(0, 1));
+      if (msgs.length > 1) showTyping(900).then(function () { ingest(msgs.slice(1)); if (!ls('cwContactDone') && !ls('cwContactSkip')) contact.hidden = false; });
+      schedule();
+    }).catch(function () {
+      sendBtn.disabled = false; el.classList.remove('pending'); el.classList.add('failed');
+      addMsg('⚠️ لا يوجد اتصال — تحقق من الإنترنت وأعد المحاولة', 'them', { bot: true });
+    });
+  }
+
+  // أسئلة سريعة: بعضها يُجاب فوراً، وبعضها يُرسل للمتجر
+  var chipActions = {
+    delivery: function () {
+      addMsg('كم أجور التوصيل؟', 'me');
+      showTyping().then(function () {
+        addMsg(fee > 0 ? '🚚 أجور التوصيل ' + fmt(fee) + ' د.ع ثابتة لكل محافظات العراق، والدفع عند الاستلام.\nتظهر الأجور في ملخص السلة قبل تأكيد الطلب.' : '🚚 التوصيل مجاني حالياً لكل المحافظات.', 'them', { bot: true });
+      });
+    },
+    order: function () {
+      addMsg('أريد معرفة حالة طلبي', 'me');
+      showTyping().then(function () {
+        addMsg('📦 تجد كل طلباتك وحالتها في <a href="/account/">صفحة حسابي</a>.\nإذا عندك سؤال عن طلب معيّن اكتب رقمه هنا وسنرد عليك.', 'them', { bot: true, html: true });
+      });
+    },
+    project: function () { send('أحتاج مساعدة في مشروع إلكترونيات'); },
+    price: function () { send('أريد سعر جملة لكمية من منتج'); },
+    product: function () { send('هل هذا المنتج متوفر؟'); }
+  };
+  root.querySelector('.chat-chips').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-chip]'); if (!b) return;
+    var fn = chipActions[b.dataset.chip]; if (fn) fn();
+  });
+
+  fab.addEventListener('click', function () { isOpen ? close() : open(); });
+  hint.addEventListener('click', function () { open(); });
+  $('.chat-x').addEventListener('click', close);
+  ctxBar.querySelector('button').addEventListener('click', function () { context = ''; updateCtx(); });
+  form.addEventListener('submit', function (e) { e.preventDefault(); var v = ta.value; ta.value = ''; ta.style.height = ''; send(v); });
+  ta.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 900) { e.preventDefault(); form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit')); }
+  });
+  ta.addEventListener('input', function () { ta.style.height = ''; ta.style.height = Math.min(ta.scrollHeight, 110) + 'px'; });
+  contact.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = contact.name.value.trim(), phone = contact.phone.value.trim();
+    if (!name && !phone) { contact.hidden = true; return; }
+    fetch(root.dataset.sendUrl, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': root.dataset.csrf },
+      body: JSON.stringify({ name: name, phone: phone })
+    }).then(function () { contact.hidden = true; ls('cwContactDone', '1'); addMsg('شكراً ' + (name || '') + ' ✔ حفظنا رقمك.', 'them', { bot: true }); }).catch(function () {});
+  });
+  contact.querySelector('.cc-skip').addEventListener('click', function () { contact.hidden = true; ls('cwContactSkip', '1'); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen) close(); });
+  // أزرار في الصفحات: «اسأل عن هذا المنتج» / «سؤال عن طلبك»
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-chat-open]'); if (!b) return;
+    e.preventDefault(); open(b.dataset.chatContext || '');
+  });
+
+  updateCtx();
+  if (ls('cwSeen')) fab.classList.add('seen');
+  else setTimeout(function () { showHint(context ? '💬 سؤال عن هذا المنتج؟ اسألنا هنا' : '💬 عندك سؤال؟ كلّمنا هنا'); }, 6000);
+  if (hasThread) poll().then(schedule);
+})();
+</script>

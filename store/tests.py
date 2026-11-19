@@ -729,3 +729,77 @@ class ProductPricingTests(TestCase):
         self.assertEqual(product.compute_prices(self.settings), (2550, 5000))
         product.sell_floor = 1000
         self.assertEqual(product.compute_prices(self.settings), (2550, 3450))
+
+
+class OnlineOrderFlowTests(TestCase):
+    """طلب الموقع: أجور التوصيل، قائمة البرنامج، التجهيز والإلغاء، والدردشة."""
+
+    def setUp(self):
+        import secrets
+
+        from .models import Order, OrderItem, PosDevice, Product
+        from .pos_sync import record_online_order_moves
+        self.device = PosDevice.objects.create(device_id='dev', name='حاسبة',
+                                               token=secrets.token_hex(16))
+        self.product = Product.objects.create(name='أردوينو', sku='12', buy_price=5000,
+                                              sell_price=8000, quantity=10)
+        # رصيد افتتاحي كما في الواقع (كل منتج عنده حركات من البرنامج)
+        from .models import StockMove
+        StockMove.objects.create(uuid='open-1', product=self.product,
+                                 product_uuid=str(self.product.uuid), delta=10, reason='opening')
+        self.order = Order.objects.create(full_name='زبون تجريبي', phone='7701234567',
+                                          province='بغداد', address='الكرادة', subtotal=16000,
+                                          delivery_fee=6000, total=22000)
+        OrderItem.objects.create(order=self.order, product=self.product, product_sku='12',
+                                 product_name='أردوينو', price=8000, quantity=2, line_total=16000)
+        record_online_order_moves(self.order)
+
+    def _auth(self):
+        return {'HTTP_AUTHORIZATION': f'Token {self.device.token}'}
+
+    def _push(self, op):
+        import uuid as uuid_module
+        event = {'uuid': str(uuid_module.uuid4()), 'entity': 'online_order', 'op': op,
+                 'entity_uuid': str(self.order.uuid), 'created_at': '2026-11-19T10:00:00.000Z',
+                 'payload': {'order_uuid': str(self.order.uuid), 'receipt_no': 'A-9'}}
+        return self.client.post('/api/pos/push/', data=json.dumps({'events': [event]}),
+                                content_type='application/json', **self._auth())
+
+    def test_delivery_fee_default_is_6000(self):
+        from .models import SiteSettings
+        self.assertEqual(SiteSettings.load().delivery_fee, 6000)
+
+    def test_orders_endpoint_lists_items_and_totals(self):
+        data = self.client.get('/api/pos/orders/', **self._auth()).json()
+        self.assertEqual(len(data['orders']), 1)
+        order = data['orders'][0]
+        self.assertEqual(order['delivery_fee'], 6000)
+        self.assertEqual(order['total'], 22000)
+        self.assertEqual(order['items'][0]['product_uuid'], str(self.product.uuid))
+        self.assertEqual(order['items'][0]['qty'], 2)
+
+    def test_prepare_event_marks_order_prepared_and_hides_it(self):
+        self.assertEqual(self._push('prepare').json()['accepted'].__len__(), 1)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, 'prepared')
+        self.assertEqual(self.order.pos_receipt_no, 'A-9')
+        self.assertEqual(self.client.get('/api/pos/orders/', **self._auth()).json()['orders'], [])
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.quantity, 8)      # التجهيز لا يخصم مرة ثانية
+
+    def test_cancel_event_returns_stock_once(self):
+        self._push('cancel')
+        self._push('cancel')
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.order.status, 'cancelled')
+        self.assertEqual(self.product.quantity, 10)
+
+    def test_chat_send_and_poll(self):
+        r = self.client.post('/chat/send/', data=json.dumps({'text': 'هل المنتج متوفر؟', 'page': '/'}),
+                             content_type='application/json', HTTP_HOST='localhost')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.json()['messages']), 2)   # الرسالة + الرد الآلي
+        state = self.client.get('/chat/state/', {'after': 0, 'open': '1'}, HTTP_HOST='localhost').json()
+        self.assertTrue(state['thread'])
+        self.assertEqual(state['messages'][0]['text'], 'هل المنتج متوفر؟')

@@ -1,0 +1,196 @@
+{% extends "admin/base_site.html" %}
+{% block title %}المحادثات | {{ site_title|default:"إدارة المتجر" }}{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">الرئيسية</a> › 💬 المحادثات</div>{% endblock %}
+{% block extrastyle %}{{ block.super }}
+<style>
+  #content { padding-bottom: 0; }
+  .inbox [hidden] { display: none !important; }
+  .inbox { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 170px); min-height: 480px;
+    border: 1px solid var(--hairline-color, #e6e9ee); border-radius: 14px; overflow: hidden; background: var(--body-bg, #fff); }
+  .ib-side { border-left: 1px solid var(--hairline-color, #e6e9ee); display: flex; flex-direction: column; min-height: 0; }
+  .ib-tools { padding: 10px; display: flex; gap: 6px; border-bottom: 1px solid var(--hairline-color, #e6e9ee); }
+  .ib-tools input { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border-color, #ccd); }
+  .ib-tools select { border-radius: 10px; }
+  .ib-list { flex: 1; overflow-y: auto; }
+  .ib-item { display: block; width: 100%; text-align: right; border: 0; background: none; padding: 11px 12px; cursor: pointer;
+    border-bottom: 1px solid var(--hairline-color, #f0f2f5); font-family: inherit; color: var(--body-fg, #1b2838); }
+  .ib-item:hover { background: var(--darkened-bg, #f6f8fb); }
+  .ib-item.active { background: color-mix(in srgb, #0B4EA2 12%, transparent); }
+  .ib-row { display: flex; align-items: center; gap: 6px; }
+  .ib-name { flex: 1; font-weight: 800; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ib-at { font-size: 11px; color: var(--body-quiet-color, #8a93a3); }
+  .ib-last { font-size: 12.5px; color: var(--body-quiet-color, #6b7685); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ib-item.unread .ib-last { color: var(--body-fg, #1b2838); font-weight: 700; }
+  .ib-badge { background: #d32f2f; color: #fff; border-radius: 999px; min-width: 20px; height: 20px; padding: 0 6px; font-size: 11.5px; font-weight: 800; display: inline-grid; place-items: center; }
+  .ib-empty { padding: 30px 16px; text-align: center; color: var(--body-quiet-color, #8a93a3); }
+  .ib-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .ib-head { padding: 12px 16px; border-bottom: 1px solid var(--hairline-color, #e6e9ee); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .ib-head .who { flex: 1; min-width: 160px; }
+  .ib-head .who strong { font-size: 16px; display: block; }
+  .ib-head .who span { font-size: 12px; color: var(--body-quiet-color, #6b7685); }
+  .ib-head a, .ib-head button { border-radius: 9px; padding: 6px 12px; font-weight: 700; font-size: 12.5px; text-decoration: none; cursor: pointer; border: 1px solid var(--hairline-color, #dde2e8); background: var(--darkened-bg, #f6f8fb); color: var(--body-fg, #1b2838); font-family: inherit; }
+  .ib-head .wa { background: #25D366; color: #fff !important; border-color: #25D366; }
+  .ib-msgs { flex: 1; overflow-y: auto; padding: 16px; background: var(--darkened-bg, #f3f6fa); display: flex; flex-direction: column; gap: 8px; }
+  .m { max-width: 72%; padding: 9px 13px; border-radius: 15px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+  .m.customer { align-self: flex-start; background: var(--body-bg, #fff); border-top-right-radius: 4px; box-shadow: 0 1px 2px rgba(2,8,23,.08); }
+  .m.admin { align-self: flex-end; background: #0B4EA2; color: #fff; border-top-left-radius: 4px; }
+  .m.auto { background: #fff4e5; color: #6d4c00; font-size: 12.5px; }
+  .m .t { display: block; font-size: 10.5px; opacity: .65; margin-top: 3px; text-align: left; }
+  .day { align-self: center; font-size: 11px; padding: 2px 10px; border-radius: 999px; background: var(--hairline-color, #e6ebf2); color: var(--body-quiet-color, #6b7685); }
+  .ib-quick { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; border-top: 1px solid var(--hairline-color, #e6e9ee); }
+  .ib-quick button { flex: none; border: 1px solid var(--hairline-color, #d6dfec); background: var(--body-bg, #fff); color: var(--body-fg, #1b2838); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .ib-quick button:hover { border-color: #FF8A00; color: #FF8A00; }
+  .ib-form { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--hairline-color, #e6e9ee); align-items: flex-end; }
+  .ib-form textarea { flex: 1; resize: none; border-radius: 12px; padding: 9px 12px; font-size: 14px; font-family: inherit; max-height: 140px; border: 1px solid var(--border-color, #ccd); }
+  .ib-form button { background: #0B4EA2; color: #fff; border: 0; border-radius: 12px; padding: 10px 20px; font-weight: 800; cursor: pointer; font-family: inherit; }
+  .ib-placeholder { flex: 1; display: grid; place-items: center; color: var(--body-quiet-color, #8a93a3); font-size: 15px; text-align: center; padding: 20px; }
+  .ib-back { display: none; }
+  @media (max-width: 800px) {
+    .inbox { grid-template-columns: 1fr; height: calc(100vh - 150px); }
+    .inbox.has-open .ib-side { display: none; }
+    .inbox:not(.has-open) .ib-main { display: none; }
+    .ib-back { display: inline-block; }
+    .m { max-width: 88%; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="inbox" id="inbox" data-open="{{ open_thread }}" data-wa="{{ wa_intl }}">
+  <aside class="ib-side">
+    <div class="ib-tools">
+      <input type="search" id="ib-q" placeholder="🔎 بحث بالاسم أو الرقم أو النص">
+      <select id="ib-show"><option value="open">المفتوحة</option><option value="all">الكل</option></select>
+    </div>
+    <div class="ib-list" id="ib-list"><div class="ib-empty">جارٍ التحميل…</div></div>
+  </aside>
+  <section class="ib-main" id="ib-main">
+    <div class="ib-placeholder" id="ib-ph">💬 اختر محادثة من القائمة<br><small>تتحدّث القائمة تلقائياً، وتصلك إشعارات عند أي رسالة جديدة إن فعّلتها من الرئيسية.</small></div>
+    <div class="ib-head" id="ib-head" hidden>
+      <button type="button" class="ib-back" id="ib-back">→ رجوع</button>
+      <div class="who"><strong id="ib-who"></strong><span id="ib-meta"></span></div>
+      <a class="wa" id="ib-wa" target="_blank" rel="noopener" hidden>واتساب</a>
+      <a id="ib-call" hidden>📞 اتصال</a>
+      <button type="button" id="ib-close">✔ إنهاء المحادثة</button>
+    </div>
+    <div class="ib-msgs" id="ib-msgs" hidden></div>
+    <div class="ib-quick" id="ib-quick" hidden>
+      {% for q in quick_replies %}<button type="button" data-q="{{ q }}">{{ q|truncatechars:38 }}</button>{% endfor %}
+    </div>
+    <form class="ib-form" id="ib-form" hidden>
+      {% csrf_token %}
+      <textarea id="ib-text" rows="2" maxlength="1000" placeholder="اكتب ردك… (Enter للإرسال، Shift+Enter لسطر جديد)"></textarea>
+      <button type="submit">إرسال</button>
+    </form>
+  </section>
+</div>
+<script>
+(function () {
+  var base = '{% url "admin:store_chatthread_changelist" %}';
+  var box = document.getElementById('inbox');
+  var list = document.getElementById('ib-list'), msgs = document.getElementById('ib-msgs');
+  var form = document.getElementById('ib-form'), ta = document.getElementById('ib-text');
+  var csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
+  var current = null, lastId = 0, lastDay = '', threadsTimer = null, msgTimer = null, threads = [];
+  function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+  function linkify(s) { return esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
+  function el(id) { return document.getElementById(id); }
+
+  function renderThreads() {
+    if (!threads.length) { list.innerHTML = '<div class="ib-empty">لا توجد محادثات بعد</div>'; return; }
+    list.innerHTML = threads.map(function (t) {
+      return '<button type="button" class="ib-item' + (t.unread ? ' unread' : '') + (current === t.id ? ' active' : '') + '" data-id="' + t.id + '">' +
+        '<div class="ib-row"><span class="ib-name">' + esc(t.name) + (t.closed ? ' ✔' : '') + '</span>' +
+        (t.unread ? '<span class="ib-badge">' + t.unread + '</span>' : '') + '<span class="ib-at">' + esc(t.at) + '</span></div>' +
+        '<div class="ib-last">' + (t.last_from === 'admin' ? '↩ ' : '') + esc(t.last) + '</div></button>';
+    }).join('');
+  }
+  function loadThreads() {
+    var q = encodeURIComponent(el('ib-q').value.trim()), show = el('ib-show').value;
+    return fetch(base + 'api/threads/?show=' + show + '&q=' + q, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (d.status !== 'ok') return;
+        threads = d.threads; renderThreads();
+        document.title = (d.unread_total ? '(' + d.unread_total + ') ' : '') + 'المحادثات';
+      }).catch(function () {});
+  }
+  function scheduleThreads() { clearTimeout(threadsTimer); threadsTimer = setTimeout(function () { loadThreads().then(scheduleThreads); }, 6000); }
+
+  function addMsg(m) {
+    if (m.date !== lastDay) { lastDay = m.date; var d = document.createElement('div'); d.className = 'day'; d.textContent = m.date; msgs.appendChild(d); }
+    var e = document.createElement('div');
+    e.className = 'm ' + (m.from === 'customer' ? 'customer' : 'admin') + (m.auto ? ' auto' : '');
+    e.innerHTML = (m.auto ? '🤖 ' : '') + linkify(m.text) + '<span class="t">' + esc(m.at) + '</span>';
+    msgs.appendChild(e);
+  }
+  function setHead(t) {
+    el('ib-who').textContent = t.name;
+    el('ib-meta').textContent = (t.phone ? t.phone + ' · ' : '') + (t.page ? 'آخر صفحة: ' + t.page : '');
+    var digits = (t.phone || '').replace(/\D/g, '');
+    if (digits.length >= 10) {
+      var wa = '964' + digits.slice(-10);
+      el('ib-wa').href = 'https://wa.me/' + wa; el('ib-wa').hidden = false;
+      el('ib-call').href = 'tel:' + t.phone; el('ib-call').hidden = false;
+    } else { el('ib-wa').hidden = true; el('ib-call').hidden = true; }
+    el('ib-close').textContent = t.closed ? '↺ إعادة فتح' : '✔ إنهاء المحادثة';
+    el('ib-close').dataset.closed = t.closed ? '1' : '0';
+  }
+  function loadMsgs(initial) {
+    if (!current) return Promise.resolve();
+    var id = current;
+    return fetch(base + 'api/' + id + '/messages/?after=' + lastId, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (d.status !== 'ok' || id !== current) return;
+        setHead(d.thread);
+        var atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 60;
+        d.messages.forEach(function (m) { if (m.id > lastId) { lastId = m.id; addMsg(m); } });
+        if (initial || atBottom) msgs.scrollTop = msgs.scrollHeight;
+      }).catch(function () {});
+  }
+  function scheduleMsgs() { clearTimeout(msgTimer); msgTimer = setTimeout(function () { loadMsgs(false).then(scheduleMsgs); }, 3500); }
+
+  function openThread(id) {
+    current = id; lastId = 0; lastDay = ''; msgs.innerHTML = '';
+    box.classList.add('has-open');
+    ['ib-head', 'ib-msgs', 'ib-quick', 'ib-form'].forEach(function (x) { el(x).hidden = false; });
+    el('ib-ph').hidden = true;
+    renderThreads();
+    history.replaceState(null, '', base + '?t=' + id);
+    loadMsgs(true).then(function () { loadThreads(); scheduleMsgs(); });
+    if (window.innerWidth > 800) ta.focus();
+  }
+  function post(body) {
+    return fetch(base + 'api/' + current + '/reply/', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); });
+  }
+  function reply(text) {
+    text = (text || '').trim(); if (!text || !current) return;
+    ta.value = '';
+    post({ text: text }).then(function (d) {
+      if (d.status !== 'ok') { alert('تعذّر الإرسال'); ta.value = text; return; }
+      d.messages.forEach(function (m) { if (m.id > lastId) { lastId = m.id; addMsg(m); } });
+      msgs.scrollTop = msgs.scrollHeight; loadThreads();
+    }).catch(function () { alert('تعذّر الإرسال — تحقق من الاتصال'); ta.value = text; });
+  }
+
+  list.addEventListener('click', function (e) { var b = e.target.closest('.ib-item'); if (b) openThread(parseInt(b.dataset.id, 10)); });
+  form.addEventListener('submit', function (e) { e.preventDefault(); reply(ta.value); });
+  ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); reply(ta.value); } });
+  el('ib-quick').addEventListener('click', function (e) { var b = e.target.closest('[data-q]'); if (b) { ta.value = b.dataset.q; ta.focus(); } });
+  el('ib-close').addEventListener('click', function () {
+    var closed = this.dataset.closed === '1';
+    post({ action: closed ? 'reopen' : 'close' }).then(function () { loadMsgs(false); loadThreads(); });
+  });
+  el('ib-back').addEventListener('click', function () { box.classList.remove('has-open'); current = null; clearTimeout(msgTimer); loadThreads(); });
+  var qTimer; el('ib-q').addEventListener('input', function () { clearTimeout(qTimer); qTimer = setTimeout(loadThreads, 300); });
+  el('ib-show').addEventListener('change', loadThreads);
+
+  loadThreads().then(function () {
+    scheduleThreads();
+    var want = parseInt(box.dataset.open || '0', 10);
+    if (want) openThread(want);
+  });
+})();
+</script>
+{% endblock %}

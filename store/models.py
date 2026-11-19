@@ -166,6 +166,9 @@ class SiteSettings(ImageCompressMixin, models.Model):
     profit_margin_pct = models.FloatField(
         default=35, verbose_name='هامش الربح %',
         help_text='نسبة الربح فوق سعر الشراء لتحديد سعر البيع. مثال: 35 تعني +‏%35.')
+    delivery_fee = models.FloatField(
+        default=6000, verbose_name='أجور التوصيل (د.ع)',
+        help_text='تُضاف لكل طلب من الموقع — نفس المبلغ لكل المحافظات. ضع 0 لإلغائها.')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -534,19 +537,29 @@ class Order(models.Model):
     STATUS_CHOICES = [
         ('pending', 'قيد المراجعة'),
         ('confirmed', 'مؤكد'),
+        ('prepared', 'تم التجهيز'),
         ('paid', 'مدفوع'),
         ('cancelled', 'ملغي'),
     ]
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     customer = models.ForeignKey(Customer, null=True, blank=True, on_delete=models.SET_NULL)
-    full_name = models.CharField(max_length=255)
-    phone = models.CharField(max_length=50)
-    province = models.CharField(max_length=100)
-    address = models.TextField()
-    payment_method = models.CharField(max_length=20, choices=PAYMENT_CHOICES, default='cod')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    total = models.FloatField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
+    full_name = models.CharField(max_length=255, verbose_name='الاسم')
+    phone = models.CharField(max_length=50, verbose_name='الهاتف')
+    province = models.CharField(max_length=100, verbose_name='المحافظة')
+    address = models.TextField(verbose_name='العنوان')
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_CHOICES, default='cod',
+                                      verbose_name='طريقة الدفع')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending',
+                              verbose_name='الحالة')
+    subtotal = models.FloatField(default=0, verbose_name='مجموع المواد')
+    delivery_fee = models.FloatField(default=0, verbose_name='أجور التوصيل')
+    total = models.FloatField(default=0, verbose_name='الإجمالي')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='التاريخ')
+    # تجهيز الطلب من برنامج الأوفلاين: يتحول لوصل بيع رسمي هناك
+    prepared_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت التجهيز')
+    pos_receipt_no = models.CharField(max_length=30, blank=True, verbose_name='رقم الوصل في البرنامج')
+    # أُعيدت كميات الطلب للمخزون (عند الإلغاء) — حتى لا تُعاد مرتين
+    stock_released = models.BooleanField(default=False, editable=False)
 
     class Meta:
         ordering = ('-created_at',)
@@ -554,7 +567,14 @@ class Order(models.Model):
         verbose_name_plural = '🧾 الطلبات'
 
     def __str__(self):
-        return f"Order {self.id} - {self.phone}"
+        return f"طلب #{self.id} — {self.full_name}"
+
+    @property
+    def items_subtotal(self):
+        """مجموع المواد — للطلبات القديمة (قبل حقل subtotal) يُحسب من العناصر."""
+        if self.subtotal:
+            return self.subtotal
+        return sum(float(i.line_total or 0) for i in self.items.all())
 
 
 class OrderItem(models.Model):
@@ -1053,3 +1073,42 @@ class SaleReservation(models.Model):
         verbose_name_plural = 'حجوزات البيع (أونلاين)'
 
     def __str__(self): return f"Reservation {self.uuid} — {self.full_name}"
+
+
+class ChatThread(models.Model):
+    """محادثة زبون مع المتجر من نافذة الدردشة في الموقع."""
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    name = models.CharField(max_length=120, blank=True, verbose_name='الاسم')
+    phone = models.CharField(max_length=50, blank=True, verbose_name='الهاتف')
+    customer = models.ForeignKey(Customer, null=True, blank=True, on_delete=models.SET_NULL)
+    last_page = models.CharField(max_length=300, blank=True, verbose_name='آخر صفحة')
+    admin_unread = models.PositiveIntegerField(default=0, verbose_name='غير مقروءة')
+    customer_unread = models.PositiveIntegerField(default=0)
+    is_closed = models.BooleanField(default=False, verbose_name='مغلقة')
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_message_at = models.DateTimeField(default=timezone.now, db_index=True, verbose_name='آخر رسالة')
+
+    class Meta:
+        ordering = ('-last_message_at',)
+        verbose_name = 'محادثة'
+        verbose_name_plural = '💬 المحادثات'
+
+    def __str__(self):
+        return self.name or self.phone or f'زائر #{self.pk}'
+
+
+class ChatMessage(models.Model):
+    SENDER_CHOICES = [('customer', 'الزبون'), ('admin', 'المتجر')]
+    thread = models.ForeignKey(ChatThread, on_delete=models.CASCADE, related_name='messages')
+    sender = models.CharField(max_length=10, choices=SENDER_CHOICES)
+    text = models.TextField(max_length=1500)
+    admin_user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ('id',)
+        verbose_name = 'رسالة'
+        verbose_name_plural = 'الرسائل'
+
+    def __str__(self):
+        return self.text[:60]

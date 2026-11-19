@@ -208,6 +208,22 @@ def _cart_items(request):
     return items, total
 
 
+def _delivery_fee(items=None):
+    """أجور التوصيل الموحّدة لكل المحافظات (من إعدادات الموقع). سلة فارغة = 0."""
+    if items is not None and not items:
+        return 0
+    try:
+        return max(0.0, float(_settings().delivery_fee or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _totals_context(items, subtotal):
+    fee = _delivery_fee(items)
+    return {'total': subtotal, 'subtotal': subtotal, 'delivery_fee': fee,
+            'grand_total': subtotal + fee}
+
+
 def category_tree():
     """شجرة التصنيفات المفعّلة كاملةً بأي عمق — مصدر واحد لكل قوائم الموقع.
 
@@ -243,6 +259,8 @@ def _base_context(request):
         # الثلاث خطوط وفي شريط تصفية المنتجات معاً
         'categories': category_tree(),
         'sections': SiteSection.objects.filter(is_active=True),
+        # الدردشة: إن كان للزائر محادثة نستطلع الردود بهدوء ونُظهر شارة على الزر
+        'chat_has_thread': bool(request.session.get('chat_thread_id')),
     }
 
 
@@ -914,7 +932,8 @@ def cart_remove(request, pk):
 def cart_view(request):
     items, total = _cart_items(request)
     context = _base_context(request)
-    context.update({'items': items, 'total': total})
+    context.update({'items': items})
+    context.update(_totals_context(items, total))
     return render(request, 'store/cart.html', context)
 
 
@@ -925,7 +944,8 @@ def checkout_phone(request):
         return redirect('cart')
     context = _base_context(request)
     logged_phone = request.session.get('customer_phone')
-    context.update({'items': items, 'total': total, 'logged_phone': logged_phone,
+    context.update(_totals_context(items, total))
+    context.update({'items': items, 'logged_phone': logged_phone,
                     'logged_phone_display': _phone_display(logged_phone) if logged_phone else ''})
     if request.method == 'POST':
         raw = request.POST.get('phone', '').strip()
@@ -1005,9 +1025,9 @@ def checkout_details(request):
     profile_complete = bool(customer and customer.full_name and customer.province and customer.address)
     editing_address = request.GET.get('edit') == '1' or not profile_complete
     context = _base_context(request)
+    context.update(_totals_context(items, total))
     context.update({
         'items': items,
-        'total': total,
         'phone': _phone_display(phone),
         'customer': customer,
         'provinces': PROVINCES,
@@ -1034,6 +1054,7 @@ def checkout_details(request):
         customer.address = address
         customer.save()
 
+        delivery_fee = _delivery_fee(items)
         order = Order.objects.create(
             customer=customer,
             full_name=full_name,
@@ -1042,7 +1063,9 @@ def checkout_details(request):
             address=address,
             payment_method=payment_method,
             status='pending',
-            total=total,
+            subtotal=total,
+            delivery_fee=delivery_fee,
+            total=total + delivery_fee,
         )
         for item in items:
             product = item['product']
@@ -1075,7 +1098,7 @@ def checkout_details(request):
         try:
             send_admin_push(
                 title='🛒 طلب جديد',
-                body=f'{full_name} — {total:,.0f} د.ع ({len(items)} منتج)',
+                body=f'{full_name} — {order.total:,.0f} د.ع ({len(items)} منتج)',
                 url=f'/admin/store/order/{order.id}/change/',
             )
         except Exception:
@@ -1088,8 +1111,19 @@ def checkout_details(request):
     return render(request, 'store/checkout_details.html', context)
 
 
+def _can_view_order(request, order):
+    """صفحة الطلب تكشف العنوان والهاتف — لصاحب الطلب أو الأدمن فقط."""
+    if request.user.is_authenticated and request.user.is_staff:
+        return True
+    if request.session.get('last_order_id') == order.id:
+        return True
+    return bool(request.session.get('customer_phone')) and request.session.get('customer_phone') == order.phone
+
+
 def order_success(request, order_id):
     order = get_object_or_404(Order, id=order_id)
+    if not _can_view_order(request, order):
+        return redirect('account')
     context = _base_context(request)
     context.update({'order': order})
     return render(request, 'store/order_success.html', context)
@@ -1097,6 +1131,8 @@ def order_success(request, order_id):
 
 def payment_redirect(request, order_id):
     order = get_object_or_404(Order, id=order_id)
+    if not _can_view_order(request, order):
+        return redirect('account')
     context = _base_context(request)
     context.update({'order': order})
     return render(request, 'store/payment_redirect.html', context)

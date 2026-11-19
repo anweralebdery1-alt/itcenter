@@ -37,7 +37,12 @@ SUPPORTED_ENTITIES = {
     'project', 'project_payment',
     # تغيير SKU وحده (إعادة ترتيب الحافظات) — لا يلمس الاسم ولا الأسعار
     'product_sku',
+    # تجهيز/إلغاء طلب الموقع من البرنامج (يتحول لوصل بيع رسمي هناك)
+    'online_order',
 }
+
+# الطلبات التي تنتظر التجهيز في المحل
+OPEN_ORDER_STATUSES = ('pending', 'confirmed')
 
 
 # ---------------------------------------------------------------- المصادقة
@@ -208,7 +213,36 @@ def _materialize(event):
         return _apply_stock_move(event.payload)
     if event.entity == 'product_sku':
         return _apply_product_sku(event.payload)
+    if event.entity == 'online_order':
+        return _apply_online_order(event.op, event.payload, event.device_id)
     return 'relayed'
+
+
+def _apply_online_order(op, payload, device_id=''):
+    """البرنامج جهّز الطلب (صار وصل بيع) أو ألغاه. المخزون:
+    - التجهيز لا يحرّك المخزون هنا: الطلب خُصم عند إنشائه، وفروق الكمية
+      يرسلها البرنامج حركات مستقلة.
+    - الإلغاء يُرجع كميات الطلب مرة واحدة فقط."""
+    order_uuid = payload.get('order_uuid')
+    order = Order.objects.filter(uuid=order_uuid).first() if order_uuid else None
+    if not order:
+        return 'skipped: unknown order'
+    if op == 'prepare':
+        if order.status == 'cancelled':
+            return 'ignored: cancelled'
+        order.status = 'prepared'
+        order.prepared_at = timezone.now()
+        order.pos_receipt_no = str(payload.get('receipt_no') or '')[:30]
+        order.save(update_fields=['status', 'prepared_at', 'pos_receipt_no'])
+        return 'prepared'
+    if op == 'cancel':
+        if order.status == 'prepared':
+            return 'ignored: already prepared'
+        order.status = 'cancelled'
+        order.save(update_fields=['status'])
+        release_online_order_moves(order, note_suffix=f' (من البرنامج {device_id})')
+        return 'cancelled'
+    return 'skipped: unknown op'
 
 
 def _apply_product_sku(payload):
@@ -369,8 +403,50 @@ def pos_orders_count(request):
     _touch(device)
     return JsonResponse({
         'status': 'ok',
-        'pending_orders': Order.objects.filter(status='pending').count(),
+        'pending_orders': Order.objects.filter(
+            status__in=OPEN_ORDER_STATUSES, prepared_at__isnull=True).count(),
     })
+
+
+@require_GET
+def pos_orders(request):
+    """طلبات الموقع التي تنتظر التجهيز — بموادها كاملة ليحوّلها البرنامج لوصل بيع."""
+    device, error = _authenticate(request)
+    if error:
+        return error
+    _touch(device)
+    orders = (Order.objects.filter(status__in=OPEN_ORDER_STATUSES, prepared_at__isnull=True)
+              .prefetch_related('items__product').order_by('created_at')[:100])
+    out = []
+    for order in orders:
+        items = []
+        for item in order.items.all():
+            product = item.product
+            items.append({
+                'product_uuid': str(product.uuid) if product else '',
+                'sku': (product.sku if product else item.product_sku) or '',
+                'name': item.product_name,
+                'price': float(item.price or 0),
+                'qty': int(item.quantity or 0),
+                'line_total': float(item.line_total or 0),
+            })
+        out.append({
+            'id': order.id,
+            'uuid': str(order.uuid),
+            'full_name': order.full_name,
+            'phone': order.phone,
+            'province': order.province,
+            'address': order.address,
+            'payment_method': order.get_payment_method_display(),
+            'status': order.status,
+            'status_label': order.get_status_display(),
+            'subtotal': float(order.items_subtotal or 0),
+            'delivery_fee': float(order.delivery_fee or 0),
+            'total': float(order.total or 0),
+            'created_at': timezone.localtime(order.created_at).strftime('%Y-%m-%d %H:%M'),
+            'items': items,
+        })
+    return JsonResponse({'status': 'ok', 'orders': out})
 
 
 @require_GET
@@ -389,6 +465,45 @@ def pos_ping(request):
 
 
 # ---------------------------------------------------------------- طلبات الموقع
+
+def release_online_order_moves(order, note_suffix=''):
+    """إلغاء طلب → تُعاد كمياته للمخزون (حركة موجبة لكل مادة) وتصل للحاسبتين.
+    مرة واحدة فقط لكل طلب (stock_released)."""
+    import uuid as uuid_module
+
+    with transaction.atomic():
+        locked = Order.objects.select_for_update().filter(pk=order.pk, stock_released=False).first()
+        if not locked:
+            return []
+        # نعيد فقط ما خُصم فعلاً عند إنشاء الطلب
+        deducted = {}
+        for move in StockMove.objects.filter(ref_type='order', ref_uuid=str(order.uuid),
+                                             reason='online_order'):
+            deducted[move.product_uuid] = deducted.get(move.product_uuid, 0) + int(move.delta or 0)
+        created = []
+        now = timezone.now().isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+        for product_uuid, delta in deducted.items():
+            if delta >= 0:
+                continue
+            product = Product.objects.filter(uuid=product_uuid).first()
+            move_uuid = str(uuid_module.uuid4())
+            note = f'إلغاء طلب الموقع رقم {order.id}{note_suffix}'[:250]
+            StockMove.objects.create(
+                uuid=move_uuid, product=product, product_uuid=product_uuid, delta=-delta,
+                reason='online_order_cancel', ref_type='order', ref_uuid=str(order.uuid),
+                note=note, device_id='website', created_at=now)
+            recompute_product_quantity(product_uuid)
+            PosEvent.objects.create(
+                uuid=str(uuid_module.uuid4()), entity='stock_move', entity_uuid=move_uuid,
+                op='insert', device_id='website', created_at=now,
+                payload={'uuid': move_uuid, 'product_uuid': product_uuid, 'delta': -delta,
+                         'reason': 'online_order_cancel', 'ref_type': 'order',
+                         'ref_uuid': str(order.uuid), 'note': note,
+                         'device_id': 'website', 'created_at': now})
+            created.append(move_uuid)
+        Order.objects.filter(pk=order.pk).update(stock_released=True)
+    return created
+
 
 def record_online_order_moves(order):
     """كل طلب من الموقع يصبح حركة مخزون تصل للحاسبتين عند أول مزامنة.
