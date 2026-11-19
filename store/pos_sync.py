@@ -110,6 +110,10 @@ def _apply_product(payload):
         fields['deleted_at'] = timezone.now()
 
     if product:
+        # سعر عُدّل من الأوفلاين → يُقفل فلا تكتب إعادة التسعير التلقائي فوقه
+        if (abs((product.buy_price or 0) - fields['buy_price']) > 0.01
+                or abs((product.sell_price or 0) - fields['sell_price']) > 0.01):
+            fields['price_locked'] = True
         for key, value in fields.items():
             setattr(product, key, value)
         # لا نلمس الوصف والصورة والتصنيف — هذه يديرها المالك من لوحة الإدارة

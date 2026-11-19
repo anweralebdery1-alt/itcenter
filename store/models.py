@@ -270,7 +270,7 @@ class SiteSettings(ImageCompressMixin, models.Model):
         """يعيد حساب سعر الشراء والبيع لكل منتج يملك سعراً دولارياً وفق سعر
         الصرف والهوامش الحالية. يرجع عدد المنتجات التي تغيّرت أسعارها."""
         products = list(
-            Product.objects.filter(price_usd__isnull=False).exclude(price_usd=0))
+            Product.objects.filter(price_usd__isnull=False, price_locked=False).exclude(price_usd=0))
         changed = []
         for p in products:
             res = p.compute_prices(self)
@@ -323,6 +323,10 @@ class Product(ImageCompressMixin, models.Model):
     sell_floor = models.FloatField(
         null=True, blank=True, verbose_name='أدنى سعر بيع',
         help_text='سعر البيع المحسوب لا ينزل عن هذا الرقم (مثلاً سعر أردنك). فارغ = بلا حدّ.')
+    price_locked = models.BooleanField(
+        default=False, verbose_name='سعر يدوي (لا يُعاد تسعيره)',
+        help_text='يُؤشَّر تلقائياً حين يُعدَّل السعر من برنامج الأوفلاين، فلا تكتب إعادة التسعير '
+                  'التلقائي فوقه. أزل التأشير ليعود المنتج إلى خطة التسعير.')
     buy_price = models.FloatField(default=0)
     sell_price = models.FloatField(default=0)
     quantity = models.IntegerField(default=0)
@@ -415,8 +419,8 @@ class Product(ImageCompressMixin, models.Model):
         سعر الشراء = الدولاري × سعر الصرف × (1 + هامش النقل%)، وهامش النقل هو
         الخاص بالمنتج إن وُجد وإلا العام. سعر البيع = سعر الشراء × (1 + هامش
         الربح%)، ولا ينزل عن «أدنى سعر بيع»، ويُقرَّب للأعلى (50 حتى 500، و250 فوقها).
-        يرجع None إن لا سعر دولاري."""
-        if not self.price_usd:
+        يرجع None إن لا سعر دولاري أو كان السعر يدوياً (مقفلاً)."""
+        if not self.price_usd or self.price_locked:
             return None
         s = settings or SiteSettings.load()
         buy = self.price_usd * (s.usd_rate or 0) * (1 + self.effective_shipping_pct(s) / 100.0)

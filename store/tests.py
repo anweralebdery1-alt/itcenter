@@ -740,6 +740,24 @@ class ProductPricingTests(TestCase):
         r = self.settings.round_sell
         self.assertEqual([r(0), r(120), r(480), r(500), r(501), r(1000), r(1001)], [0, 150, 500, 500, 750, 1000, 1250])
 
+    def test_offline_price_edit_locks_product_against_repricing(self):
+        import uuid as U
+        from . import pos_sync
+        u = str(U.uuid4())
+        p = Product.objects.create(name='x', uuid=u, price_usd=1.0, buy_price=2450, sell_price=3500)
+        # نفس السعر من الأوفلاين → لا قفل
+        pos_sync._apply_product({'uuid': u, 'name': 'x', 'sku': '', 'buy_price': 2450, 'sell_price': 3500,
+                                 'updated_at': '2030-01-01T00:00:00.000Z'})
+        p.refresh_from_db(); self.assertFalse(p.price_locked)
+        # سعر جديد من الأوفلاين → يُقفل ويصعد للموقع
+        pos_sync._apply_product({'uuid': u, 'name': 'x', 'sku': '', 'buy_price': 2450, 'sell_price': 4000,
+                                 'updated_at': '2030-01-02T00:00:00.000Z'})
+        p.refresh_from_db()
+        self.assertTrue(p.price_locked); self.assertEqual(p.sell_price, 4000)
+        self.assertIsNone(p.compute_prices(self.settings))
+        self.settings.save()  # إعادة التسعير لا تلمسه
+        p.refresh_from_db(); self.assertEqual(p.sell_price, 4000)
+
     def test_tier_bounds_must_ascend(self):
         from django.core.exceptions import ValidationError
         self.settings.tier2_max_usd = 0.5

@@ -257,7 +257,7 @@ def _reconcile_price_fields(obj, form):
     يُصلح خطأ كان يعيد كتابة التعديل اليدوي من المعادلة فيضيع السعر الجديد."""
     changed = set(getattr(form, 'changed_data', None) or [])
     manual_price = bool(changed & {'buy_price', 'sell_price'})
-    if obj.price_usd and (changed & {'price_usd', 'shipping_pct', 'sell_floor'}) and not manual_price:
+    if obj.price_usd and (changed & {'price_usd', 'shipping_pct', 'sell_floor', 'price_locked'}) and not manual_price:
         res = obj.compute_prices()
         if res:
             obj.buy_price, obj.sell_price = res
@@ -721,7 +721,7 @@ class ProductAdmin(admin.ModelAdmin):
             'fields': ('name', 'sku', 'description', 'specifications_text'),
         }),
         ('الأسعار والمخزون', {
-            'fields': ('price_usd', 'shipping_pct', 'buy_price', 'aliexpress_url', 'sell_price',
+            'fields': ('price_usd', 'shipping_pct', 'price_locked', 'buy_price', 'aliexpress_url', 'sell_price',
                        'sell_floor', 'competitor_price',
                        'competitor_url', 'quantity', 'is_offer'),
             'description': 'اكتب السعر الدولاري فقط ويُحسب الشراء والبيع تلقائياً من سعر الصرف '
@@ -798,7 +798,7 @@ class ProductReviewAdmin(admin.ModelAdmin):
     change_list_template = 'admin/store/productreview/change_list.html'
     list_per_page = 100
     search_fields = ('name', 'sku', 'legacy_name')
-    list_filter = ('reviewed', 'needs_review', 'auto_filled', HasImageFilter, 'category')
+    list_filter = ('reviewed', 'needs_review', 'auto_filled', 'price_locked', HasImageFilter, 'category')
     list_display = ('image_preview', 'legacy_name', 'name', 'price_usd', 'buy_price', 'bab_link',
                     'ali_link', 'sell_price', 'competitor_price', 'comp_link', 'price_flag', 'reviewed_flag')
     list_display_links = ('legacy_name',)
