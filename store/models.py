@@ -1069,6 +1069,33 @@ class AppRelease(models.Model):
         return tuple(parts[:3])
 
 
+def _mobile_device_id():
+    return f'mobile-{uuid.uuid4()}'
+
+
+class MobilePosProfile(models.Model):
+    """حساب بيع من الهاتف (صفحة /pos/). يكتب الوصولات والمشاريع بنفس صيغة أحداث
+    البرنامج، فتظهر على الحاسبتين كأنها من جهاز ثالث. لكل حساب بادئة وصولات خاصة."""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='mobile_pos',
+                                verbose_name='حساب الدخول')
+    pos_username = models.CharField(max_length=100, verbose_name='اسم المستخدم في البرنامج',
+                                    help_text='مثل: انور — يظهر في سجل العمليات على الحاسبتين')
+    receipt_prefix = models.CharField(
+        max_length=10, unique=True, verbose_name='بادئة الوصولات',
+        help_text='مثل AP أو MP. لا تستعمل A أو M أو S (بادئات الحاسبات) حتى لا يتكرر رقم وصل.')
+    last_receipt_no = models.PositiveIntegerField(default=0, verbose_name='آخر رقم وصل')
+    device_id = models.CharField(max_length=64, unique=True, default=_mobile_device_id,
+                                 editable=False, verbose_name='معرّف الجهاز')
+    is_active = models.BooleanField(default=True, verbose_name='مفعّل')
+
+    class Meta:
+        verbose_name = 'حساب بيع بالهاتف'
+        verbose_name_plural = 'حسابات البيع بالهاتف'
+
+    def __str__(self):
+        return f'{self.pos_username} ({self.receipt_prefix})'
+
+
 class PosEvent(models.Model):
     """سجل المزامنة المركزي: كل تغيير حصل على أي حاسبة يُخزَّن هنا مرة واحدة،
     وتسحبه الحاسبة الأخرى بالترتيب. هذا السجل هو مصدر الحقيقة الكامل للنظام."""

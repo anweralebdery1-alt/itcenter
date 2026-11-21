@@ -30,6 +30,7 @@ from .models import (
     GraduationProject,
     Order,
     OrderItem,
+    MobilePosProfile,
     PhoneOTP,
     PosDevice,
     PosEvent,
@@ -1264,6 +1265,17 @@ class StockMoveAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(MobilePosProfile)
+class MobilePosProfileAdmin(admin.ModelAdmin):
+    """من يبيع من الهاتف (صفحة /pos/). الدخول بنفس حساب لوحة الإدارة."""
+    list_display = ('pos_username', 'user', 'receipt_prefix', 'last_receipt_no', 'is_active', 'open_link')
+    readonly_fields = ('device_id',)
+
+    @admin.display(description='صفحة البيع')
+    def open_link(self, obj):
+        return format_html('<a href="/pos/" target="_blank">فتح /pos/</a>')
 
 
 @admin.register(PosEvent)

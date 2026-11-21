@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
 
-from store import chat, views
+from store import chat, mobile_pos, views
 from store.sitemaps import SITEMAPS
 
 
@@ -44,6 +44,16 @@ urlpatterns = [
     path('order/<int:order_id>/payment/', views.payment_redirect, name='payment_redirect'),
     path('chat/state/', chat.chat_state, name='chat_state'),
     path('chat/send/', chat.chat_send, name='chat_send'),
+    # البيع من الهاتف (أنور ومهند) — يكتب أحداث البرنامج نفسها
+    path('pos/', mobile_pos.pos_home, name='mobile_pos'),
+    path('pos/manifest.webmanifest', mobile_pos.pos_manifest, name='mobile_pos_manifest'),
+    path('pos/receipt/<uuid:sale_uuid>/', mobile_pos.pos_receipt, name='mobile_pos_receipt'),
+    path('pos/api/products/', mobile_pos.api_products, name='mobile_pos_products'),
+    path('pos/api/sale/', mobile_pos.api_sale, name='mobile_pos_sale'),
+    path('pos/api/sales/', mobile_pos.api_sales, name='mobile_pos_sales'),
+    path('pos/api/projects/', mobile_pos.api_projects, name='mobile_pos_projects'),
+    path('pos/api/projects/save/', mobile_pos.api_project_save, name='mobile_pos_project_save'),
+    path('pos/api/projects/payment/', mobile_pos.api_project_payment, name='mobile_pos_project_payment'),
     path('api/', include('store.api_urls')),
 ]
 

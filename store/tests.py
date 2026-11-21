@@ -850,3 +850,115 @@ class OnlineOrderFlowTests(TestCase):
         state = self.client.get('/chat/state/', {'after': 0, 'open': '1'}, HTTP_HOST='localhost').json()
         self.assertTrue(state['thread'])
         self.assertEqual(state['messages'][0]['text'], 'هل المنتج متوفر؟')
+
+
+class MobilePosTests(TestCase):
+    """البيع من الهاتف يكتب أحداث البرنامج نفسها ويخصم المخزون."""
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from .models import MobilePosProfile, StockMove
+        self.user = User.objects.create_user('pos_test', password='x-test-pass', is_staff=True)
+        self.profile = MobilePosProfile.objects.create(user=self.user, pos_username='انور',
+                                                       receipt_prefix='AP')
+        self.p1 = Product.objects.create(name='Hidden part', sku='12', sell_price=1500,
+                                         buy_price=900, quantity=0, reviewed=False)
+        self.p2 = Product.objects.create(name='Visible part', sku='55', sell_price=250,
+                                         buy_price=100, quantity=0, reviewed=True)
+        for p, q in ((self.p1, 3), (self.p2, 10)):
+            StockMove.objects.create(uuid=f'mv-{p.pk}', product=p, product_uuid=str(p.uuid),
+                                     delta=q, reason='adjust', created_at='2026-01-01T00:00:00.000Z')
+            Product.objects.filter(pk=p.pk).update(quantity=q)
+        self.client.force_login(self.user)
+
+    def _post(self, url, body):
+        return self.client.post(url, data=json.dumps(body), content_type='application/json')
+
+    def test_requires_profile(self):
+        from django.contrib.auth.models import User
+        other = User.objects.create_user('np', password='x-test-pass', is_staff=True)
+        self.client.force_login(other)
+        self.assertEqual(self.client.get('/pos/').status_code, 403)
+        self.client.logout()
+        self.assertEqual(self.client.get('/pos/').status_code, 302)
+
+    def test_products_include_hidden(self):
+        data = self.client.get('/pos/api/products/').json()
+        names = {p['n'] for p in data['products']}
+        self.assertIn('Hidden part', names)
+        self.assertNotIn('buy_price', json.dumps(data))
+
+    def test_sale_writes_offline_events(self):
+        from .models import PosEvent
+        r = self._post('/pos/api/sale/', {'buyer': 'زبون', 'phone': '+964 781 545 3320',
+                                           'discount': 250, 'items': [
+                                               {'u': str(self.p1.uuid), 'q': 2, 'p': 1500},
+                                               {'u': str(self.p2.uuid), 'q': 1, 'p': 250}]})
+        d = r.json()
+        self.assertTrue(d['ok'], d)
+        self.assertEqual(d['receipt_no'], 'AP-1')
+        self.p1.refresh_from_db()
+        self.assertEqual(self.p1.quantity, 1)
+        sale = PosEvent.objects.get(entity='sale')
+        self.assertEqual(sale.device_id, self.profile.device_id)
+        self.assertEqual(sale.user_name, 'انور')
+        p = sale.payload
+        self.assertEqual(p['total'], 3250.0)
+        self.assertEqual(p['discount'], 250.0)
+        self.assertEqual(p['phone'], '07815453320')
+        self.assertEqual({i['quantity'] for i in p['items']}, {2, 1})
+        moves = PosEvent.objects.filter(entity='stock_move', device_id=self.profile.device_id)
+        self.assertEqual(sorted(m.payload['delta'] for m in moves), [-2, -1])
+        self.assertTrue(all(m.payload['ref_uuid'] == p['uuid'] for m in moves))
+        page = self.client.get(f"/pos/receipt/{p['uuid']}/")
+        self.assertContains(page, 'AP-1')
+        self.assertContains(page, '3,000.00 د.ع')
+        sales = self.client.get('/pos/api/sales/').json()['sales']
+        self.assertEqual(sales[0]['no'], 'AP-1')
+        self.assertEqual(sales[0]['net'], 3000.0)
+        d2 = self._post('/pos/api/sale/', {'items': [{'u': str(self.p2.uuid), 'q': 1, 'p': 250}]}).json()
+        self.assertEqual(d2['receipt_no'], 'AP-2')
+
+    def test_oversell_rejected(self):
+        from .models import PosEvent
+        r = self._post('/pos/api/sale/', {'items': [{'u': str(self.p1.uuid), 'q': 4, 'p': 1500}]})
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(PosEvent.objects.exists())
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.last_receipt_no, 0)
+
+    def test_deleted_sale_hidden(self):
+        from .models import PosEvent
+        d = self._post('/pos/api/sale/', {'items': [{'u': str(self.p2.uuid), 'q': 1, 'p': 250}]}).json()
+        PosEvent.objects.create(uuid='del-1', entity='sale', entity_uuid=d['uuid'], op='delete',
+                                payload={'uuid': d['uuid'], 'deleted_at': 'x'}, device_id='pc')
+        self.assertEqual(self.client.get('/pos/api/sales/').json()['sales'], [])
+
+    def test_project_add_update_payment(self):
+        from .models import PosEvent
+        d = self._post('/pos/api/projects/save/', {'name': 'مشروع تخرج', 'person': 'علي',
+                                                    'practical_price': '200,000', 'materials_cost': 80000,
+                                                    'theory_price': 100000, 'theory_share_pct': ''}).json()
+        self.assertTrue(d['ok'])
+        ev = PosEvent.objects.get(entity='project')
+        for key in ('name', 'person', 'phone', 'practical_details', 'practical_price', 'materials_cost',
+                    'theory_details', 'theory_price', 'theory_owner', 'theory_share_pct', 'note',
+                    'status', 'year', 'archived_at', 'uuid', 'device_id', 'created_at',
+                    'updated_at', 'deleted_at'):
+            self.assertIn(key, ev.payload)
+        self.assertEqual(ev.payload['theory_share_pct'], 80.0)
+        self.assertEqual(ev.payload['status'], 'open')
+        r = self._post('/pos/api/projects/payment/', {'project_uuid': d['uuid'], 'kind': 'client',
+                                                       'amount': 150000, 'date': '2026-11-21'}).json()
+        self.assertTrue(r['ok'])
+        self._post('/pos/api/projects/save/', {'uuid': d['uuid'], 'name': 'مشروع تخرج 2',
+                                                'practical_price': 200000, 'materials_cost': 80000,
+                                                'theory_price': 100000, 'theory_share_pct': 80})
+        projects = self.client.get('/pos/api/projects/').json()['projects']
+        self.assertEqual(len(projects), 1)
+        pj = projects[0]
+        self.assertEqual(pj['name'], 'مشروع تخرج 2')
+        self.assertEqual(pj['fin']['total_fees'], 300000)
+        self.assertEqual(pj['fin']['client_remaining'], 150000)
+        self.assertEqual(pj['fin']['our_income'], 140000)  # 120000 ربح عملي + 20000 حصتنا
+        self.assertEqual(PosEvent.objects.filter(entity='project', op='update').count(), 1)

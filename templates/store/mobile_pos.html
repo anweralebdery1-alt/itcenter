@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B4EA2">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="/pos/manifest.webmanifest">
+<title>بيع المحل</title>
+<style>
+  :root { --pri:#0B4EA2; --pri2:#e8f0fb; --ok:#2e7d32; --bad:#c62828; --warn:#ef6c00;
+          --bg:#f4f6f9; --card:#fff; --tx:#1b1f24; --mut:#6b7280; --bd:#e1e5ea; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--tx);
+    font-family: Tahoma, "Segoe UI", Arial, sans-serif; font-size:15px; }
+  header { position:sticky; top:0; z-index:20; background:var(--pri); color:#fff;
+    padding:10px 14px; display:flex; align-items:center; justify-content:space-between; }
+  header b { font-size:16px; }
+  header small { opacity:.85; }
+  main { padding:10px 12px 150px; max-width:720px; margin:0 auto; }
+  .tab { display:none; } .tab.on { display:block; }
+  nav.bottom { position:fixed; bottom:0; left:0; right:0; z-index:30; background:#fff;
+    border-top:1px solid var(--bd); display:flex; padding-bottom:env(safe-area-inset-bottom); }
+  nav.bottom button { flex:1; border:0; background:none; padding:9px 0 8px; font:inherit;
+    font-size:13px; color:var(--mut); }
+  nav.bottom button.on { color:var(--pri); font-weight:bold; }
+  nav.bottom .ic { display:block; font-size:20px; }
+  input, textarea, select { font:inherit; width:100%; padding:10px 11px; border:1px solid var(--bd);
+    border-radius:10px; background:#fff; color:var(--tx); }
+  input:focus, textarea:focus { outline:2px solid var(--pri); border-color:transparent; }
+  .search { position:sticky; top:52px; z-index:10; background:var(--bg); padding:4px 0 8px; }
+  .btn { border:0; border-radius:10px; padding:11px 14px; font:inherit; font-weight:bold;
+    background:var(--pri); color:#fff; cursor:pointer; }
+  .btn.ok { background:var(--ok); } .btn.bad { background:var(--bad); }
+  .btn.ghost { background:var(--pri2); color:var(--pri); }
+  .btn.sm { padding:6px 10px; font-size:13px; }
+  .btn:disabled { opacity:.5; }
+  .list { display:flex; flex-direction:column; gap:7px; }
+  .prod { display:flex; gap:10px; align-items:center; background:var(--card); border:1px solid var(--bd);
+    border-radius:12px; padding:8px; }
+  .prod img, .prod .noimg { width:48px; height:48px; border-radius:8px; object-fit:cover; flex:none;
+    background:#eef1f4; }
+  .prod .info { flex:1; min-width:0; }
+  .prod .nm { font-size:14px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2;
+    -webkit-box-orient:vertical; overflow:hidden; unicode-bidi:plaintext; }
+  .prod .meta { font-size:12px; color:var(--mut); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; }
+  .prod .price { font-weight:bold; color:var(--pri); white-space:nowrap; }
+  .prod.out { opacity:.5; }
+  .chip { background:var(--pri2); color:var(--pri); border-radius:6px; padding:1px 6px; font-size:12px; }
+  .chip.z { background:#fdecea; color:var(--bad); }
+  .add { width:40px; height:40px; border-radius:50%; border:0; background:var(--ok); color:#fff;
+    font-size:22px; flex:none; }
+  .cartbar { position:fixed; left:0; right:0; bottom:58px; z-index:25; padding:0 12px 8px;
+    padding-bottom:calc(8px + env(safe-area-inset-bottom)); }
+  .cartbar button { width:100%; max-width:696px; margin:0 auto; display:flex; justify-content:space-between;
+    align-items:center; border:0; border-radius:12px; padding:13px 16px; background:var(--ok); color:#fff;
+    font:inherit; font-weight:bold; box-shadow:0 4px 16px rgba(0,0,0,.18); }
+  .sheet { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.4); display:none; }
+  .sheet.on { display:block; }
+  .sheet .panel { position:absolute; bottom:0; left:0; right:0; max-height:92vh; overflow:auto;
+    background:var(--bg); border-radius:16px 16px 0 0; padding:14px 14px calc(18px + env(safe-area-inset-bottom));
+    max-width:720px; margin:0 auto; }
+  .sheet h3 { margin:0 0 10px; display:flex; justify-content:space-between; align-items:center; }
+  .x { border:0; background:#e5e7eb; border-radius:50%; width:32px; height:32px; font-size:16px; }
+  .line { background:#fff; border:1px solid var(--bd); border-radius:12px; padding:9px; margin-bottom:7px; }
+  .line .nm { font-size:13.5px; unicode-bidi:plaintext; }
+  .line .row { display:flex; gap:8px; align-items:center; margin-top:7px; }
+  .qty { display:flex; align-items:center; gap:4px; }
+  .qty button { width:34px; height:34px; border-radius:8px; border:1px solid var(--bd); background:#fff;
+    font-size:18px; }
+  .qty input { width:52px; text-align:center; padding:6px; }
+  .line .pr { width:110px; padding:6px 8px; }
+  .line .sum { margin-inline-start:auto; font-weight:bold; white-space:nowrap; }
+  .del { border:0; background:none; color:var(--bad); font-size:18px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  label.f { display:block; font-size:12.5px; color:var(--mut); margin:8px 0 3px; }
+  .tot { background:#fff; border:1px solid var(--bd); border-radius:12px; padding:10px 12px; margin:10px 0; }
+  .tot div { display:flex; justify-content:space-between; padding:3px 0; }
+  .tot .net { font-size:18px; font-weight:bold; color:var(--ok); border-top:1px dashed var(--bd); margin-top:4px; padding-top:7px; }
+  .card { background:#fff; border:1px solid var(--bd); border-radius:12px; padding:10px 12px; }
+  .rc { display:flex; justify-content:space-between; gap:8px; align-items:center; text-decoration:none; color:inherit; }
+  .rc .no { font-weight:bold; color:var(--pri); }
+  .rc .sub { font-size:12px; color:var(--mut); }
+  .rc .amt { font-weight:bold; white-space:nowrap; }
+  .kpi { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .muted { color:var(--mut); font-size:13px; }
+  .empty { text-align:center; color:var(--mut); padding:30px 0; }
+  .toast { position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:60; background:#111;
+    color:#fff; padding:10px 16px; border-radius:10px; font-size:14px; display:none; max-width:90vw; }
+  .pj .top { display:flex; justify-content:space-between; gap:8px; }
+  .pj .nm { font-weight:bold; }
+  .pj .nums { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; font-size:12px; }
+  .pj .nums div { background:var(--bg); border-radius:8px; padding:5px; text-align:center; }
+  .pj .nums b { display:block; font-size:13.5px; }
+  .neg { color:var(--bad); } .pos { color:var(--ok); }
+  .pay { display:flex; justify-content:space-between; font-size:13px; padding:6px 0; border-bottom:1px solid var(--bd); }
+  .seg { display:flex; gap:6px; margin:6px 0; }
+  .seg button { flex:1; border:1px solid var(--bd); background:#fff; border-radius:9px; padding:8px; font:inherit; font-size:13px; }
+  .seg button.on { background:var(--pri); color:#fff; border-color:var(--pri); }
+</style>
+</head>
+<body>
+<header>
+  <div><b>🛒 بيع المحل</b> <small id="hdrinfo">· {{ profile.pos_username }} · وصولات {{ profile.receipt_prefix }}</small></div>
+  <button class="btn sm ghost" onclick="loadProducts(true)">⟳ تحديث</button>
+</header>
+
+<main>
+  <!-- ============ البيع ============ -->
+  <section class="tab on" id="t-sell">
+    <div class="search"><input id="q" type="search" placeholder="ابحث بالاسم أو رقم الحافظة (SKU)…" autocomplete="off"></div>
+    <div class="list" id="results"><div class="empty">جاري تحميل المنتجات…</div></div>
+  </section>
+
+  <!-- ============ الوصولات ============ -->
+  <section class="tab" id="t-sales">
+    <div class="search"><input id="sq" type="search" placeholder="ابحث برقم الوصل أو الزبون أو الهاتف أو مادة…" autocomplete="off"></div>
+    <div class="kpi"><span class="muted">مبيعات اليوم (كل الأجهزة)</span><b id="today">—</b></div>
+    <div class="list" id="sales"></div>
+  </section>
+
+  <!-- ============ المشاريع ============ -->
+  <section class="tab" id="t-proj">
+    <div class="kpi" style="margin-top:4px">
+      <button class="btn ok" onclick="openProject(null)">＋ مشروع جديد</button>
+      <label class="muted"><input type="checkbox" id="arch" style="width:auto" onchange="loadProjects()"> المؤرشفة</label>
+    </div>
+    <div class="list" id="projects"></div>
+  </section>
+</main>
+
+<div class="cartbar" id="cartbar" style="display:none">
+  <button onclick="openCart()"><span>🧾 السلة: <span id="cc">0</span> قطعة</span><span id="ct">0</span></button>
+</div>
+
+<nav class="bottom">
+  <button class="on" data-t="sell"><span class="ic">🛒</span>بيع</button>
+  <button data-t="sales"><span class="ic">🧾</span>الوصولات</button>
+  <button data-t="proj"><span class="ic">🎓</span>المشاريع</button>
+</nav>
+
+<!-- سلة البيع -->
+<div class="sheet" id="cart"><div class="panel">
+  <h3>السلة <button class="x" onclick="closeSheet('cart')">✕</button></h3>
+  <div id="lines"></div>
+  <div class="grid2">
+    <div><label class="f">اسم المشتري</label><input id="buyer" placeholder="اختياري"></div>
+    <div><label class="f">هاتف الزبون</label><input id="phone" inputmode="tel" placeholder="07…"></div>
+  </div>
+  <label class="f">الخصم (د.ع)</label><input id="disc" inputmode="numeric" value="0">
+  <div class="tot">
+    <div><span>المجموع</span><span id="sumT">0</span></div>
+    <div><span>الخصم</span><span id="sumD">0</span></div>
+    <div class="net"><span>الصافي</span><span id="sumN">0</span></div>
+  </div>
+  <button class="btn ok" style="width:100%" id="sellBtn" onclick="doSell()">✔ إصدار الوصل</button>
+  <button class="btn ghost" style="width:100%;margin-top:8px" onclick="clearCart()">تفريغ السلة</button>
+</div></div>
+
+<!-- مشروع -->
+<div class="sheet" id="proj"><div class="panel">
+  <h3><span id="pjTitle">مشروع جديد</span> <button class="x" onclick="closeSheet('proj')">✕</button></h3>
+  <input type="hidden" id="pj_uuid">
+  <label class="f">اسم المشروع *</label><input id="pj_name">
+  <div class="grid2">
+    <div><label class="f">اسم الشخص</label><input id="pj_person"></div>
+    <div><label class="f">رقم الهاتف</label><input id="pj_phone" inputmode="tel"></div>
+  </div>
+  <div class="grid2">
+    <div><label class="f">تكلفة العملي (بيع)</label><input id="pj_practical_price" inputmode="numeric"></div>
+    <div><label class="f">تكلفة المواد (شراء)</label><input id="pj_materials_cost" inputmode="numeric"></div>
+  </div>
+  <label class="f">تفاصيل العملي</label><textarea id="pj_practical_details" rows="2"></textarea>
+  <div class="grid2">
+    <div><label class="f">تكلفة النظري</label><input id="pj_theory_price" inputmode="numeric"></div>
+    <div><label class="f">نسبة صاحب النظري %</label><input id="pj_theory_share_pct" inputmode="numeric" placeholder="80"></div>
+  </div>
+  <label class="f">اسم صاحب النظري</label><input id="pj_theory_owner">
+  <label class="f">تفاصيل النظري</label><textarea id="pj_theory_details" rows="2"></textarea>
+  <label class="f">ملاحظات</label><textarea id="pj_note" rows="2"></textarea>
+  <div class="tot" id="pjFin" style="display:none"></div>
+  <button class="btn ok" style="width:100%;margin-top:10px" onclick="saveProject()">💾 حفظ المشروع</button>
+
+  <div id="pjPays" style="display:none;margin-top:14px">
+    <h3 style="font-size:15px">الدفعات</h3>
+    <div class="card" id="payList"></div>
+    <div class="seg"><button class="on" data-k="client">دفعة زبون</button><button data-k="theory_payout">تسليم لصاحب النظري</button></div>
+    <div class="grid2">
+      <div><label class="f">المبلغ</label><input id="pay_amount" inputmode="numeric"></div>
+      <div><label class="f">التاريخ</label><input id="pay_date" type="date" value="{{ today }}"></div>
+    </div>
+    <label class="f">ملاحظة</label><input id="pay_note">
+    <button class="btn" style="width:100%;margin-top:10px" onclick="addPayment()">＋ إضافة الدفعة</button>
+  </div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CSRF = "{{ csrf_token }}";
+let PRODUCTS = [], CART = {}, PROJECTS = [], payKind = 'client';
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(Number(n) || 0).toLocaleString('en-US');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = v => Number(String(v ?? '').replace(/[^\d.]/g, '')) || 0;
+const norm = s => String(s || '').toLowerCase()
+  .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[ًٌٍَُِّْـ]/g, '');
+
+function toast(msg, ms = 2600) { const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', ms); }
+
+async function api(url, body) {
+  const opt = body ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+                       body: JSON.stringify(body) } : {};
+  const r = await fetch(url, Object.assign({ credentials: 'same-origin' }, opt));
+  if (r.redirected || r.status === 302) { location.href = '/admin/login/?next=/pos/'; throw new Error('login'); }
+  let d; try { d = await r.json(); } catch (e) { throw new Error('خطأ في الاتصال بالسيرفر'); }
+  if (!d.ok) throw new Error(d.error || 'خطأ');
+  return d;
+}
+
+// ---------------- التبويبات
+document.querySelectorAll('nav.bottom button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav.bottom button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === 't-' + b.dataset.t));
+  $('cartbar').style.visibility = b.dataset.t === 'sell' ? 'visible' : 'hidden';
+  if (b.dataset.t === 'sales') loadSales();
+  if (b.dataset.t === 'proj') loadProjects();
+  try { sessionStorage.setItem('pos_tab', b.dataset.t); } catch (e) {}
+});
+
+// ---------------- المنتجات والبحث
+async function loadProducts(manual) {
+  try {
+    const d = await api('/pos/api/products/');
+    PRODUCTS = d.products.map(p => Object.assign(p, { k: norm(p.n + ' ' + p.s) }));
+    render();
+    if (manual) toast('تم تحديث المنتجات (' + PRODUCTS.length + ')');
+  } catch (e) { if (e.message !== 'login') $('results').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+}
+
+function render() {
+  const raw = $('q').value.trim(), q = norm(raw), words = q.split(/\s+/).filter(Boolean);
+  let rows;
+  if (!words.length) {
+    rows = [];
+    $('results').innerHTML = '<div class="empty">اكتب اسم المادة أو رقم حافظتها.<br><small>' +
+      PRODUCTS.length + ' منتج (الظاهرة في الموقع والمخفية)</small></div>';
+    return;
+  }
+  rows = PRODUCTS.filter(p => words.every(w => p.k.includes(w)));
+  rows.sort((a, b) => (b.s === raw) - (a.s === raw) || (b.q > 0) - (a.q > 0));
+  rows = rows.slice(0, 60);
+  if (!rows.length) { $('results').innerHTML = '<div class="empty">لا توجد نتائج</div>'; return; }
+  $('results').innerHTML = rows.map(p => {
+    const left = p.q - (CART[p.u]?.q || 0);
+    return `<div class="prod ${left <= 0 ? 'out' : ''}">
+      ${p.i ? `<img loading="lazy" src="${esc(p.i)}" alt="">` : '<div class="noimg"></div>'}
+      <div class="info"><div class="nm">${esc(p.n)}</div>
+        <div class="meta"><span class="price">${fmt(p.p)}</span>
+          ${p.s ? `<span class="chip">حافظة ${esc(p.s)}</span>` : ''}
+          <span class="chip ${left <= 0 ? 'z' : ''}">متوفر ${left}</span></div></div>
+      <button class="add" ${left <= 0 ? 'disabled' : ''} onclick="addToCart('${p.u}')">＋</button></div>`;
+  }).join('');
+}
+$('q').addEventListener('input', render);
+
+// ---------------- السلة
+function addToCart(u) {
+  const p = PRODUCTS.find(x => x.u === u); if (!p) return;
+  const line = CART[u] || (CART[u] = { u, n: p.n, p: p.p, q: 0, max: p.q });
+  if (line.q >= p.q) { toast('لا توجد كمية أكثر من المتوفر (' + p.q + ')'); return; }
+  line.q++; saveCart(); render(); toast('أُضيف: ' + p.n.slice(0, 40), 1200);
+}
+function saveCart() {
+  const lines = Object.values(CART).filter(l => l.q > 0);
+  CART = Object.fromEntries(lines.map(l => [l.u, l]));
+  const count = lines.reduce((s, l) => s + l.q, 0), total = lines.reduce((s, l) => s + l.q * l.p, 0);
+  $('cartbar').style.display = count ? 'block' : 'none';
+  $('cc').textContent = count; $('ct').textContent = fmt(total) + ' د.ع';
+  try { localStorage.setItem('pos_cart', JSON.stringify(CART)); } catch (e) {}
+  drawLines();
+}
+function drawLines() {
+  const lines = Object.values(CART);
+  $('lines').innerHTML = lines.length ? lines.map(l => `<div class="line"><div class="nm">${esc(l.n)}</div>
+    <div class="row"><div class="qty"><button onclick="chg('${l.u}',-1)">−</button>
+      <input value="${l.q}" inputmode="numeric" onchange="setQ('${l.u}',this.value)"><button onclick="chg('${l.u}',1)">＋</button></div>
+      <input class="pr" value="${l.p}" inputmode="numeric" onchange="setP('${l.u}',this.value)" title="السعر">
+      <span class="sum">${fmt(l.p * l.q)}</span><button class="del" onclick="setQ('${l.u}',0)">🗑</button></div></div>`).join('')
+    : '<div class="empty">السلة فارغة</div>';
+  sums();
+}
+function sums() {
+  const t = Object.values(CART).reduce((s, l) => s + l.q * l.p, 0), d = num($('disc').value);
+  $('sumT').textContent = fmt(t); $('sumD').textContent = fmt(d); $('sumN').textContent = fmt(t - d) + ' د.ع';
+}
+$('disc').addEventListener('input', sums);
+function chg(u, d) { const l = CART[u]; setQ(u, l.q + d); }
+function setQ(u, v) {
+  const l = CART[u]; const p = PRODUCTS.find(x => x.u === u); let q = Math.max(0, parseInt(v) || 0);
+  if (p && q > p.q) { q = p.q; toast('المتوفر ' + p.q + ' فقط'); }
+  l.q = q; saveCart(); render();
+}
+function setP(u, v) { CART[u].p = num(v); saveCart(); }
+function openCart() { drawLines(); $('cart').classList.add('on'); }
+function closeSheet(id) { $(id).classList.remove('on'); }
+function clearCart() { if (!confirm('تفريغ السلة؟')) return; CART = {}; saveCart(); render(); closeSheet('cart'); }
+
+async function doSell() {
+  const items = Object.values(CART).map(l => ({ u: l.u, q: l.q, p: l.p }));
+  if (!items.length) return;
+  const net = items.reduce((s, l) => s + l.q * l.p, 0) - num($('disc').value);
+  if (!confirm('إصدار الوصل بصافي ' + fmt(net) + ' د.ع؟')) return;
+  $('sellBtn').disabled = true;
+  try {
+    const d = await api('/pos/api/sale/', { items, buyer: $('buyer').value, phone: $('phone').value,
+                                            discount: num($('disc').value) });
+    CART = {}; saveCart(); $('buyer').value = ''; $('phone').value = ''; $('disc').value = '0';
+    location.href = '/pos/receipt/' + d.uuid + '/';
+  } catch (e) { if (e.message !== 'login') alert(e.message); loadProducts(); }
+  finally { $('sellBtn').disabled = false; }
+}
+
+// ---------------- الوصولات
+let salesTimer;
+async function loadSales() {
+  try {
+    const d = await api('/pos/api/sales/?q=' + encodeURIComponent($('sq').value.trim()));
+    $('today').textContent = d.today_total == null ? '—' : fmt(d.today_total) + ' د.ع';
+    $('sales').innerHTML = d.sales.length ? d.sales.map(s => `<a class="card rc" href="/pos/receipt/${s.uuid}/">
+      <div><div class="no">${esc(s.no)} ${s.online ? '<span class="chip">طلب موقع</span>' : ''}</div>
+      <div class="sub">${esc(s.buyer || 'بلا اسم')} ${s.phone ? '· ' + esc(s.phone) : ''}</div>
+      <div class="sub">${esc(s.date)} · ${s.count} قطعة</div></div><div class="amt">${fmt(s.net)}</div></a>`).join('')
+      : '<div class="empty">لا توجد وصولات</div>';
+  } catch (e) { if (e.message !== 'login') toast(e.message); }
+}
+$('sq').addEventListener('input', () => { clearTimeout(salesTimer); salesTimer = setTimeout(loadSales, 350); });
+
+// ---------------- المشاريع
+const PJ = ['name','person','phone','practical_price','materials_cost','practical_details',
+            'theory_price','theory_share_pct','theory_owner','theory_details','note'];
+async function loadProjects() {
+  try {
+    const d = await api('/pos/api/projects/' + ($('arch').checked ? '?archived=1' : ''));
+    PROJECTS = d.projects;
+    $('projects').innerHTML = PROJECTS.length ? PROJECTS.map(p => `<div class="card pj" onclick="openProject('${p.uuid}')">
+      <div class="top"><div><div class="nm">${esc(p.name)}</div><div class="muted">${esc(p.person || '')} ${p.phone ? '· ' + esc(p.phone) : ''}</div></div>
+      <span class="chip">${p.archived_at ? 'مؤرشف' : (p.status === 'open' ? 'مفتوح' : esc(p.status || ''))}</span></div>
+      <div class="nums"><div>الأجور<b>${fmt(p.fin.total_fees)}</b></div><div>الواصل<b>${fmt(p.fin.paid_client)}</b></div>
+      <div>المتبقي<b class="${p.fin.client_remaining > 0 ? 'neg' : 'pos'}">${fmt(p.fin.client_remaining)}</b></div></div></div>`).join('')
+      : '<div class="empty">لا توجد مشاريع</div>';
+  } catch (e) { if (e.message !== 'login') toast(e.message); }
+}
+function openProject(uuid) {
+  const p = PROJECTS.find(x => x.uuid === uuid) || {};
+  $('pj_uuid').value = uuid || '';
+  $('pjTitle').textContent = uuid ? 'تعديل المشروع' : 'مشروع جديد';
+  PJ.forEach(k => $('pj_' + k).value = (p[k] ?? '') === 0 && !uuid ? '' : (p[k] ?? ''));
+  if (uuid) {
+    const f = p.fin;
+    $('pjFin').style.display = 'block';
+    $('pjFin').innerHTML = `<div><span>مجموع الأجور</span><span>${fmt(f.total_fees)}</span></div>
+      <div><span>الواصل من الزبون</span><span>${fmt(f.paid_client)}</span></div>
+      <div><span>المتبقي على الزبون</span><span class="${f.client_remaining > 0 ? 'neg' : ''}">${fmt(f.client_remaining)}</span></div>
+      <div><span>ربح العملي</span><span>${fmt(f.practical_profit)}</span></div>
+      <div><span>حصة صاحب النظري</span><span>${fmt(f.theory_owner_share)}</span></div>
+      <div><span>المتبقي لصاحب النظري</span><span>${fmt(f.theory_owner_remaining)}</span></div>
+      <div class="net"><span>دخلنا من المشروع</span><span>${fmt(f.our_income)}</span></div>`;
+    $('pjPays').style.display = 'block';
+    $('payList').innerHTML = p.payments.length ? p.payments.map(x => `<div class="pay">
+      <span>${x.kind === 'client' ? 'دفعة زبون' : 'تسليم للنظري'} ${x.note ? '· ' + esc(x.note) : ''}</span>
+      <span>${esc(x.date)} · <b>${fmt(x.amount)}</b></span></div>`).join('') : '<div class="muted">لا توجد دفعات</div>';
+  } else { $('pjFin').style.display = 'none'; $('pjPays').style.display = 'none'; }
+  $('proj').classList.add('on');
+}
+async function saveProject() {
+  const body = { uuid: $('pj_uuid').value };
+  PJ.forEach(k => body[k] = $('pj_' + k).value);
+  if (!body.name.trim()) { toast('اسم المشروع مطلوب'); return; }
+  try {
+    const d = await api('/pos/api/projects/save/', body);
+    toast('تم حفظ المشروع'); await loadProjects(); openProject(d.uuid);
+  } catch (e) { if (e.message !== 'login') alert(e.message); }
+}
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+  payKind = b.dataset.k; document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b)); });
+async function addPayment() {
+  const amount = num($('pay_amount').value);
+  if (!amount) { toast('اكتب المبلغ'); return; }
+  try {
+    await api('/pos/api/projects/payment/', { project_uuid: $('pj_uuid').value, kind: payKind, amount,
+                                              date: $('pay_date').value, note: $('pay_note').value });
+    $('pay_amount').value = ''; $('pay_note').value = '';
+    toast('تمت إضافة الدفعة'); const u = $('pj_uuid').value; await loadProjects(); openProject(u);
+  } catch (e) { if (e.message !== 'login') alert(e.message); }
+}
+
+// ---------------- البدء
+try { CART = JSON.parse(localStorage.getItem('pos_cart') || '{}') || {}; } catch (e) { CART = {}; }
+loadProducts().then(saveCart);
+try { const t = sessionStorage.getItem('pos_tab'); if (t && t !== 'sell') document.querySelector(`nav.bottom button[data-t="${t}"]`).click(); } catch (e) {}
+</script>
+</body>
+</html>
