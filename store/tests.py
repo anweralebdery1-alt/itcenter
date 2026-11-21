@@ -962,3 +962,18 @@ class MobilePosTests(TestCase):
         self.assertEqual(pj['fin']['client_remaining'], 150000)
         self.assertEqual(pj['fin']['our_income'], 140000)  # 120000 ربح عملي + 20000 حصتنا
         self.assertEqual(PosEvent.objects.filter(entity='project', op='update').count(), 1)
+
+    def test_seller_and_editable_date(self):
+        d = self._post('/pos/api/sale/', {'date': '2026-11-20T09:30',
+                                           'items': [{'u': str(self.p2.uuid), 'q': 1, 'p': 250}]}).json()
+        row = self.client.get('/pos/api/sales/').json()['sales'][0]
+        self.assertEqual(row['date'], '2026-11-20 09:30')
+        self.assertEqual(row['seller'], 'انور · هاتف انور')
+        page = self.client.get(f"/pos/receipt/{d['uuid']}/")
+        self.assertContains(page, 'هاتف انور')
+        self.assertContains(page, '2026-11-20 09:30')
+        home = self.client.get('/pos/')
+        self.assertContains(home, 'AP-2')
+        # تاريخ غير صالح → الآن
+        d2 = self._post('/pos/api/sale/', {'date': 'xx', 'items': [{'u': str(self.p2.uuid), 'q': 1, 'p': 250}]})
+        self.assertTrue(d2.json()['ok'])

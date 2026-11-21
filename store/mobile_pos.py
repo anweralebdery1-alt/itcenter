@@ -18,7 +18,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import MobilePosProfile, PosEvent, Product, SiteSettings
+from .models import MobilePosProfile, PosDevice, PosEvent, Product, SiteSettings
 from .pos_sync import _materialize
 
 LOGIN_URL = '/admin/login/'
@@ -66,6 +66,17 @@ def _money(value):
     return f'{_num(value):,.2f}'
 
 
+def _sale_date(value):
+    """تاريخ الوصل بصيغة البرنامج «2026-11-21 15:04». يُقبل من الهاتف (قابل للتعديل
+    كما في نافذة الوصل في البرنامج) وإلا فالآن بتوقيت بغداد."""
+    from datetime import datetime
+    text = str(value or '').strip().replace('T', ' ')[:16]
+    try:
+        return datetime.strptime(text, '%Y-%m-%d %H:%M').strftime('%Y-%m-%d %H:%M')
+    except ValueError:
+        return timezone.localtime().strftime('%Y-%m-%d %H:%M')
+
+
 def _profile(request):
     profile = MobilePosProfile.objects.filter(user=request.user, is_active=True).first()
     return profile
@@ -111,8 +122,9 @@ def _sales_state():
     """الوصولات كما تراها الحاسبتان: آخر نسخة لكل وصل، مع الحذف."""
     sales = {}
     deleted = set()
-    for entity_uuid, op, payload in (PosEvent.objects.filter(entity='sale').order_by('seq')
-                                     .values_list('entity_uuid', 'op', 'payload')):
+    for entity_uuid, op, payload, user_name, device_id in (
+            PosEvent.objects.filter(entity='sale').order_by('seq')
+            .values_list('entity_uuid', 'op', 'payload', 'user_name', 'device_id')):
         payload = payload or {}
         key = payload.get('uuid') or entity_uuid
         if not key:
@@ -124,8 +136,25 @@ def _sales_state():
         if current and not payload.get('items'):
             current.update({k: v for k, v in payload.items() if k != 'items'})
         else:
-            sales[key] = dict(payload)
+            first = ({'_seller': current['_seller'], '_device': current['_device']} if current
+                     else {'_seller': user_name or '', '_device': device_id or ''})
+            sales[key] = dict(payload, **first)
     return {k: v for k, v in sales.items() if k not in deleted}
+
+
+def _device_names():
+    """اسم مقروء لكل جهاز: الحاسبات من «أجهزة نقاط البيع»، والهواتف من حساباتها."""
+    names = dict(PosDevice.objects.values_list('device_id', 'name'))
+    names.update({p.device_id: f'هاتف {p.pos_username}' for p in MobilePosProfile.objects.all()})
+    names['website'] = 'الموقع'
+    return names
+
+
+def _seller_label(sale, names):
+    """«انور · هاتف انور»: البائع (مستخدم البرنامج) والجهاز الذي صدر منه الوصل."""
+    seller = sale.get('_seller') or ''
+    device = names.get(sale.get('_device') or '', '')
+    return ' · '.join(x for x in (seller, device) if x) or '—'
 
 
 def _projects_state():
@@ -182,9 +211,11 @@ def _project_financials(row, paid_client=0.0, paid_theory=0.0):
 
 @_profile_required
 def pos_home(request):
+    profile = request.pos_profile
     return render(request, 'store/mobile_pos.html', {
-        'profile': request.pos_profile,
+        'profile': profile,
         'today': date.today().isoformat(),
+        'next_receipt': f'{profile.receipt_prefix}-{profile.last_receipt_no + 1}',
     })
 
 
@@ -215,6 +246,7 @@ def pos_receipt(request, sale_uuid):
         'net_s': _money(net),
         'logo_url': site.logo.url if getattr(site, 'logo', None) else '',
         'wa_phone': ('964' + phone[1:]) if phone.startswith('07') else '',
+        'seller': _seller_label(sale, _device_names()),
         'wa_text': '\n'.join(lines),
     })
 
@@ -245,6 +277,7 @@ def api_sale(request):
     buyer = str(data.get('buyer') or '').strip()[:200]
     phone = _clean_phone(data.get('phone'))
     discount = max(0.0, _num(data.get('discount')))
+    sale_date = _sale_date(data.get('date'))
     lines = data.get('items') or []
     if not lines:
         return JsonResponse({'ok': False, 'error': 'السلة فارغة'}, status=400)
@@ -278,7 +311,6 @@ def api_sale(request):
         receipt_no = f'{profile.receipt_prefix}-{profile.last_receipt_no}'
 
         now = _utc_now_iso()
-        sale_date = timezone.localtime().strftime('%Y-%m-%d %H:%M')
         sale_uuid = _new_uuid()
         total = 0.0
         payload_items = []
@@ -313,6 +345,7 @@ def api_sale(request):
 def api_sales(request):
     """الوصولات (من الحاسبتين والهاتف) — الأحدث أولاً."""
     query = str(request.GET.get('q') or '').strip()
+    names = _device_names()
     rows = []
     for sale in _sales_state().values():
         if query:
@@ -329,6 +362,7 @@ def api_sales(request):
             'date': sale.get('date') or '', 'net': total - discount,
             'count': sum(int(_num(i.get('quantity'))) for i in sale.get('items') or []),
             'online': bool(sale.get('online_order_id')),
+            'seller': _seller_label(sale, names),
         })
     rows.sort(key=lambda r: r['date'], reverse=True)
     today = timezone.localtime().strftime('%Y-%m-%d')
