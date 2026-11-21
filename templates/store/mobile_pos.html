@@ -106,6 +106,8 @@
   .pj .nums b { display:block; font-size:13.5px; }
   .neg { color:var(--bad); } .pos { color:var(--ok); }
   .pay { display:flex; justify-content:space-between; font-size:13px; padding:6px 0; border-bottom:1px solid var(--bd); }
+  label.chk { display:flex; align-items:center; gap:8px; margin:12px 0 4px; font-weight:bold; color:var(--pri); }
+  label.chk input { width:22px; height:22px; }
   .seg { display:flex; gap:6px; margin:6px 0; }
   .seg button { flex:1; border:1px solid var(--bd); background:#fff; border-radius:9px; padding:8px; font:inherit; font-size:13px; }
   .seg button.on { background:var(--pri); color:#fff; border-color:var(--pri); }
@@ -184,18 +186,23 @@
     <div><label class="f">اسم الشخص</label><input id="pj_person"></div>
     <div><label class="f">رقم الهاتف</label><input id="pj_phone" inputmode="tel"></div>
   </div>
+  <label class="f">مدة الإنجاز</label><input id="pj_duration" placeholder="مثال: أسبوعان، 30 يوم">
   <div class="grid2">
     <div><label class="f">تكلفة العملي (بيع)</label><input id="pj_practical_price" inputmode="numeric"></div>
     <div><label class="f">تكلفة المواد (شراء)</label><input id="pj_materials_cost" inputmode="numeric"></div>
   </div>
   <label class="f">تفاصيل العملي</label><textarea id="pj_practical_details" rows="2"></textarea>
+  <label class="chk"><input type="checkbox" id="pj_has_theory" onchange="toggleTheory()"> 📘 يحتوي جزءاً نظرياً</label>
+  <div id="pjTheory" style="display:none">
   <div class="grid2">
     <div><label class="f">تكلفة النظري</label><input id="pj_theory_price" inputmode="numeric"></div>
     <div><label class="f">نسبة صاحب النظري %</label><input id="pj_theory_share_pct" inputmode="numeric" placeholder="80"></div>
   </div>
   <label class="f">اسم صاحب النظري</label><input id="pj_theory_owner">
   <label class="f">تفاصيل النظري</label><textarea id="pj_theory_details" rows="2"></textarea>
+  </div>
   <label class="f">ملاحظات</label><textarea id="pj_note" rows="2"></textarea>
+  <div id="pjFirst"><label class="f">دفعة أولى (عربون) — اختياري</label><input id="pj_first_pay" inputmode="numeric"></div>
   <div class="tot" id="pjFin" style="display:none"></div>
   <button class="btn ok" style="width:100%;margin-top:10px" onclick="saveProject()">💾 حفظ المشروع</button>
 
@@ -361,14 +368,14 @@ async function loadSales() {
 $('sq').addEventListener('input', () => { clearTimeout(salesTimer); salesTimer = setTimeout(loadSales, 350); });
 
 // ---------------- المشاريع
-const PJ = ['name','person','phone','practical_price','materials_cost','practical_details',
+const PJ = ['name','person','phone','duration','practical_price','materials_cost','practical_details',
             'theory_price','theory_share_pct','theory_owner','theory_details','note'];
 async function loadProjects() {
   try {
     const d = await api('/pos/api/projects/' + ($('arch').checked ? '?archived=1' : ''));
     PROJECTS = d.projects;
     $('projects').innerHTML = PROJECTS.length ? PROJECTS.map(p => `<div class="card pj" onclick="openProject('${p.uuid}')">
-      <div class="top"><div><div class="nm">${esc(p.name)}</div><div class="muted">${esc(p.person || '')} ${p.phone ? '· ' + esc(p.phone) : ''}</div></div>
+      <div class="top"><div><div class="nm">${esc(p.name)}</div><div class="muted">${esc(p.person || '')} ${p.phone ? '· ' + esc(p.phone) : ''} ${p.duration ? '· ⏱ ' + esc(p.duration) : ''}</div></div>
       <span class="chip">${p.archived_at ? 'مؤرشف' : (p.status === 'open' ? 'مفتوح' : esc(p.status || ''))}</span></div>
       <div class="nums"><div>الأجور<b>${fmt(p.fin.total_fees)}</b></div><div>الواصل<b>${fmt(p.fin.paid_client)}</b></div>
       <div>المتبقي<b class="${p.fin.client_remaining > 0 ? 'neg' : 'pos'}">${fmt(p.fin.client_remaining)}</b></div></div></div>`).join('')
@@ -379,7 +386,11 @@ function openProject(uuid) {
   const p = PROJECTS.find(x => x.uuid === uuid) || {};
   $('pj_uuid').value = uuid || '';
   $('pjTitle').textContent = uuid ? 'تعديل المشروع' : 'مشروع جديد';
-  PJ.forEach(k => $('pj_' + k).value = (p[k] ?? '') === 0 && !uuid ? '' : (p[k] ?? ''));
+  PJ.forEach(k => $('pj_' + k).value = p[k] ?? '');
+  if (!uuid) $('pj_theory_share_pct').value = '80';
+  $('pj_has_theory').checked = !!(Number(p.theory_price) || p.theory_owner || p.theory_details);
+  toggleTheory();
+  $('pj_first_pay').value = ''; $('pjFirst').style.display = uuid ? 'none' : 'block';
   if (uuid) {
     const f = p.fin;
     $('pjFin').style.display = 'block';
@@ -397,9 +408,18 @@ function openProject(uuid) {
   } else { $('pjFin').style.display = 'none'; $('pjPays').style.display = 'none'; }
   $('proj').classList.add('on');
 }
+function toggleTheory() {
+  const on = $('pj_has_theory').checked;
+  $('pjTheory').style.display = on ? 'block' : 'none';
+  if (on && !$('pj_theory_share_pct').value) $('pj_theory_share_pct').value = '80';
+}
 async function saveProject() {
   const body = { uuid: $('pj_uuid').value };
   PJ.forEach(k => body[k] = $('pj_' + k).value);
+  if (!$('pj_has_theory').checked) {   // بلا نظري → حقوله فارغة كما في البرنامج
+    body.theory_price = 0; body.theory_owner = ''; body.theory_details = ''; body.theory_share_pct = 80;
+  }
+  if (!body.uuid) body.first_pay = num($('pj_first_pay').value);
   if (!body.name.trim()) { toast('اسم المشروع مطلوب'); return; }
   try {
     const d = await api('/pos/api/projects/save/', body);

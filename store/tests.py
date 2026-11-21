@@ -977,3 +977,19 @@ class MobilePosTests(TestCase):
         # تاريخ غير صالح → الآن
         d2 = self._post('/pos/api/sale/', {'date': 'xx', 'items': [{'u': str(self.p2.uuid), 'q': 1, 'p': 250}]})
         self.assertTrue(d2.json()['ok'])
+
+    def test_project_duration_and_first_payment(self):
+        from .models import PosEvent
+        d = self._post('/pos/api/projects/save/', {'name': 'p', 'duration': 'أسبوعان',
+                                                    'practical_price': 100000, 'first_pay': 30000}).json()
+        ev = PosEvent.objects.get(entity='project')
+        self.assertEqual(ev.payload['duration'], 'أسبوعان')
+        pay = PosEvent.objects.get(entity='project_payment')
+        self.assertEqual(pay.payload['amount'], 30000.0)
+        self.assertEqual(pay.payload['note'], 'دفعة أولى')
+        pj = self.client.get('/pos/api/projects/').json()['projects'][0]
+        self.assertEqual(pj['duration'], 'أسبوعان')
+        self.assertEqual(pj['fin']['client_remaining'], 70000)
+        # التعديل لا يضيف دفعة أولى ثانية
+        self._post('/pos/api/projects/save/', {'uuid': d['uuid'], 'name': 'p', 'first_pay': 5})
+        self.assertEqual(PosEvent.objects.filter(entity='project_payment').count(), 1)

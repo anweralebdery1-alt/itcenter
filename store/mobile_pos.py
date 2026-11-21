@@ -28,6 +28,7 @@ PROJECT_FIELDS = (
     'name', 'person', 'phone', 'practical_details', 'practical_price',
     'materials_cost', 'theory_details', 'theory_price', 'theory_owner',
     'theory_share_pct', 'note', 'status', 'year', 'archived_at',
+    'duration',          # مدة الإنجاز — البرنامج v1.9.1
 )
 PROJECT_MONEY_FIELDS = ('practical_price', 'materials_cost', 'theory_price', 'theory_share_pct')
 PAYMENT_KINDS = ('client', 'theory_payout')
@@ -445,6 +446,15 @@ def api_project_save(request):
                             'created_at': now, 'updated_at': now, 'deleted_at': None})
             op = 'insert'
         _emit(profile, 'project', project_uuid, op, payload, now)
+        first_pay = _num(data.get('first_pay'))
+        if op == 'insert' and first_pay > 0:
+            # دفعة أولى (عربون) مع الإضافة — كما في نموذج البرنامج
+            payment_uuid = _new_uuid()
+            _emit(profile, 'project_payment', payment_uuid, 'insert', {
+                'project_uuid': project_uuid, 'kind': 'client', 'amount': first_pay,
+                'date': date.today().isoformat(), 'note': 'دفعة أولى',
+                'uuid': payment_uuid, 'device_id': profile.device_id, 'created_at': now,
+            }, now)
     return JsonResponse({'ok': True, 'uuid': project_uuid})
 
 
