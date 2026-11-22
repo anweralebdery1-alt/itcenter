@@ -144,7 +144,7 @@ def _dashboard_stats():
     inv_sell = P.aggregate(v=Sum(F('sell_price') * F('quantity'), output_field=FloatField()))['v'] or 0
     orders_total = Order.objects.count()
     orders_pending = Order.objects.filter(status='pending').count()
-    sales_total = Order.objects.filter(status__in=['confirmed', 'prepared', 'paid']).aggregate(v=Sum('total'))['v'] or 0
+    sales_total = Order.objects.filter(status__in=['confirmed', 'prepared', 'shipped', 'delivered', 'paid']).aggregate(v=Sum('total'))['v'] or 0
     customers = Customer.objects.count()
     reviews_pending = Review.objects.filter(is_approved=False).count()
     return [
@@ -936,6 +936,8 @@ _ORDER_STATUS_COLORS = {
     'pending': ('#fff4e5', '#b45309'),
     'confirmed': ('#e8f1ff', '#0B4EA2'),
     'prepared': ('#e7f6ec', '#1b7a3d'),
+    'shipped': ('#f3e8ff', '#6b21a8'),
+    'delivered': ('#dcfce7', '#166534'),
     'paid': ('#e3f7f5', '#0f766e'),
     'cancelled': ('#fdecea', '#b71c1c'),
 }
@@ -952,7 +954,8 @@ class OrderAdmin(admin.ModelAdmin):
     search_fields = ('full_name', 'phone', 'uuid', 'id')
     list_per_page = 50
     readonly_fields = ('uuid', 'created_at', 'subtotal', 'total',
-                       'prepared_at', 'pos_receipt_no', 'payment_method')
+                       'prepared_at', 'pos_receipt_no', 'payment_method',
+                       'cancelled_at', 'cancelled_by', 'cancel_reason')
     fieldsets = (
         ('حالة الطلب', {'fields': ('status', 'delivery_fee'),
                         'description': 'تعديل أجور التوصيل يُعيد حساب الإجمالي عند الحفظ.'}),
@@ -961,7 +964,8 @@ class OrderAdmin(admin.ModelAdmin):
             'classes': ('collapse',)}),
         ('تفاصيل', {
             'fields': (('subtotal', 'total'), 'payment_method',
-                       ('prepared_at', 'pos_receipt_no'), ('uuid', 'created_at')),
+                       ('prepared_at', 'pos_receipt_no'), ('uuid', 'created_at'),
+                       ('cancelled_by', 'cancelled_at'), 'cancel_reason'),
             'classes': ('collapse',)}),
     )
 
@@ -1035,6 +1039,10 @@ class OrderAdmin(admin.ModelAdmin):
             obj.subtotal = obj.items_subtotal
             obj.delivery_fee = max(0.0, float(obj.delivery_fee or 0))
             obj.total = obj.subtotal + obj.delivery_fee
+        if change and obj.status == 'cancelled' and previous != 'cancelled':
+            from django.utils import timezone as _tz
+            obj.cancelled_at = _tz.now()
+            obj.cancelled_by = 'admin'
         super().save_model(request, obj, form, change)
         if change and obj.status == 'cancelled' and previous != 'cancelled':
             from django.contrib import messages

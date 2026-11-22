@@ -1,0 +1,140 @@
+{% extends 'store/base.html' %}
+{% load store_extras %}
+{% block title %}طلب #{{ order.id }} | {{ settings.site_name }}{% endblock %}
+{% block extra_css %}
+<style>
+  .od-wrap { max-width: 760px; margin: 24px auto 40px; }
+  .od-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+  .od-badge { padding:4px 12px; border-radius:999px; font-weight:800; font-size:13px; white-space:nowrap; }
+  .st-pending { background:#fff4e5; color:#b45309; } .st-confirmed { background:#e8f1ff; color:#0B4EA2; }
+  .st-prepared { background:#e7f6ec; color:#1b7a3d; } .st-shipped { background:#f3e8ff; color:#6b21a8; }
+  .st-delivered, .st-paid { background:#dcfce7; color:#166534; } .st-cancelled { background:#fdecea; color:#b71c1c; }
+
+  .od-track { display:flex; margin:22px 0 6px; padding:0; list-style:none; }
+  .od-track li { flex:1; text-align:center; position:relative; font-size:12px; color:#94a3b8; font-weight:700; }
+  .od-track li::before { content:''; display:block; width:26px; height:26px; margin:0 auto 6px; border-radius:50%;
+                         background:#e2e8f0; border:3px solid #fff; box-shadow:0 0 0 2px #e2e8f0; position:relative; z-index:1; }
+  .od-track li::after { content:''; position:absolute; top:12px; inset-inline-start:-50%; width:100%; height:4px; background:#e2e8f0; }
+  .od-track li:first-child::after { display:none; }
+  .od-track li.done { color:#1b7a3d; }
+  .od-track li.done::before { background:#22c55e; box-shadow:0 0 0 2px #22c55e; }
+  .od-track li.done::after { background:#22c55e; }
+  .od-track li.current { color:var(--ink); }
+  .od-track li.current::before { box-shadow:0 0 0 4px #bbf7d0; }
+
+  .od-item { display:grid; grid-template-columns:64px 1fr auto; gap:12px; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); }
+  .od-item:last-child { border-bottom:0; }
+  .od-img { width:64px; height:64px; border-radius:8px; overflow:hidden; background:linear-gradient(135deg,#eaf2ff,#fff1dc);
+            display:grid; place-items:center; font-weight:900; color:var(--blue); }
+  .od-img img { width:100%; height:100%; object-fit:cover; }
+  .od-name { font-weight:800; color:var(--ink); display:block; line-height:1.4; }
+  .od-sum td { padding:6px 0; }
+  .od-box { border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-top:14px; }
+  .od-cancelled { background:#fff5f5; border-color:#fecaca; }
+  .od-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+  .od-actions form { margin:0; }
+  #cancelBox { display:none; }
+  #cancelBox.open { display:block; }
+  .reason { display:flex; align-items:center; gap:8px; padding:7px 0; cursor:pointer; }
+  @media print { header, footer, nav, .od-actions, #cancelBox, .chat-widget { display:none !important; } }
+</style>
+{% endblock %}
+{% block content %}
+<main class="container-wide">
+  <div class="panel p-3 p-md-4 od-wrap">
+    <a href="{% url 'account' %}" class="small text-muted">→ طلباتي</a>
+
+    {% if flash %}<div class="alert alert-info mt-2 mb-0">{{ flash }}</div>{% endif %}
+
+    <div class="od-head mt-2">
+      <div>
+        <h2 class="fw-bold m-0">طلب #{{ order.id }}</h2>
+        <div class="text-muted small mt-1">{{ order.created_at|date:"Y-m-d H:i" }} · {{ items|length }} مادة</div>
+      </div>
+      <span class="od-badge st-{{ order.status }}">{{ order.get_status_display }}</span>
+    </div>
+
+    {% if order.status == 'cancelled' %}
+      <div class="od-box od-cancelled">
+        <b>❌ هذا الطلب ملغي</b>
+        {% if order.cancelled_at %}<span class="text-muted small"> — {{ order.cancelled_at|date:"Y-m-d H:i" }}</span>{% endif %}
+        {% if order.cancelled_by == 'customer' and order.cancel_reason %}<div class="small mt-1">السبب: {{ order.cancel_reason }}</div>{% endif %}
+      </div>
+    {% else %}
+      <ol class="od-track">
+        {% for st in order.timeline %}
+          <li class="{% if st.done %}done{% endif %} {% if st.current %}current{% endif %}">{{ st.label }}</li>
+        {% endfor %}
+      </ol>
+      {% if order.status == 'pending' %}
+        <div class="text-muted small text-center">سنتصل بك على <b dir="ltr">{{ phone_display }}</b> لتأكيد الطلب.</div>
+      {% endif %}
+    {% endif %}
+
+    <div class="od-box">
+      {% for it in items %}
+        <div class="od-item">
+          {% if it.product %}
+            <a class="od-img" href="{% url 'product_detail' it.product.id %}">{% if it.product.list_image_url %}<img src="{{ it.product.list_image_url }}" alt="" loading="lazy">{% else %}{{ it.product_name|first }}{% endif %}</a>
+          {% else %}
+            <div class="od-img">{{ it.product_name|first }}</div>
+          {% endif %}
+          <div>
+            {% if it.product %}<a class="od-name" href="{% url 'product_detail' it.product.id %}">{{ it.product_name }}</a>{% else %}<span class="od-name">{{ it.product_name }}</span>{% endif %}
+            <div class="text-muted small">{{ it.quantity }} × {{ it.price|money }} د.ع</div>
+          </div>
+          <div class="fw-bold text-nowrap">{{ it.line_total|money }}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="od-box">
+      <table class="w-100 od-sum">
+        <tr><td>مجموع المواد</td><td class="text-start">{{ order.items_subtotal|money }} د.ع</td></tr>
+        <tr><td>🚚 أجور التوصيل</td><td class="text-start">{% if order.delivery_fee %}{{ order.delivery_fee|money }} د.ع{% else %}مجاناً{% endif %}</td></tr>
+        <tr class="fw-bold fs-5"><td>الإجمالي</td><td class="text-start text-success">{{ order.total|money }} د.ع</td></tr>
+      </table>
+    </div>
+
+    <div class="od-box small">
+      <div><b>التوصيل إلى:</b> {{ order.full_name }} — {{ order.province }}، {{ order.address }}</div>
+      <div class="mt-1"><b>الهاتف:</b> <span dir="ltr">{{ phone_display }}</span></div>
+      <div class="mt-1"><b>طريقة الدفع:</b> {{ order.get_payment_method_display }}</div>
+      {% if order.pos_receipt_no %}<div class="mt-1"><b>رقم الوصل:</b> {{ order.pos_receipt_no }}</div>{% endif %}
+    </div>
+
+    <div class="od-actions">
+      {% if can_cancel %}
+        <button type="button" class="btn btn-outline-danger" id="cancelBtn">إلغاء الطلب</button>
+      {% endif %}
+      <form method="post" action="{% url 'order_reorder' order.id %}">{% csrf_token %}
+        <button class="btn btn-orange" type="submit">🔁 اطلب مرة أخرى</button>
+      </form>
+      <button type="button" class="btn btn-outline-secondary" data-chat-open data-chat-context="بخصوص طلبي رقم #{{ order.id }}">💬 استفسار عن الطلب</button>
+      <button type="button" class="btn btn-outline-secondary" onclick="window.print()">🖨️ طباعة</button>
+    </div>
+
+    {% if can_cancel %}
+      <form method="post" action="{% url 'order_cancel' order.id %}" id="cancelBox" class="od-box od-cancelled">
+        {% csrf_token %}
+        <b>لماذا تريد إلغاء الطلب؟</b>
+        {% for r in cancel_reasons %}
+          <label class="reason"><input type="radio" name="reason" value="{{ r }}" {% if forloop.first %}checked{% endif %}> {{ r }}</label>
+        {% endfor %}
+        <input type="text" name="other" class="form-control mt-1" maxlength="200" placeholder="ملاحظة (اختياري)">
+        <div class="d-flex gap-2 mt-3">
+          <button class="btn btn-danger" type="submit">تأكيد الإلغاء</button>
+          <button class="btn btn-light" type="button" id="cancelBack">رجوع</button>
+        </div>
+      </form>
+      <script>
+        (function () {
+          var box = document.getElementById('cancelBox');
+          document.getElementById('cancelBtn').onclick = function () { box.classList.add('open'); box.scrollIntoView({behavior: 'smooth', block: 'center'}); };
+          document.getElementById('cancelBack').onclick = function () { box.classList.remove('open'); };
+        })();
+      </script>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}

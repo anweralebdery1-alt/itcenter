@@ -42,6 +42,9 @@ urlpatterns = [
     path('checkout/details/', views.checkout_details, name='checkout_details'),
     path('order/<int:order_id>/success/', views.order_success, name='order_success'),
     path('order/<int:order_id>/payment/', views.payment_redirect, name='payment_redirect'),
+    path('order/<int:order_id>/', views.order_detail, name='order_detail'),
+    path('order/<int:order_id>/cancel/', views.order_cancel, name='order_cancel'),
+    path('order/<int:order_id>/reorder/', views.order_reorder, name='order_reorder'),
     path('chat/state/', chat.chat_state, name='chat_state'),
     path('chat/send/', chat.chat_send, name='chat_send'),
     # البيع من الهاتف (أنور ومهند) — يكتب أحداث البرنامج نفسها

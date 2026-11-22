@@ -233,7 +233,26 @@ def _apply_online_order(op, payload, device_id=''):
         return 'skipped: unknown order'
     if op == 'prepare':
         if order.status == 'cancelled':
-            return 'ignored: cancelled'
+            # أُلغي الطلب (غالباً من الزبون) بينما كان البرنامج يجهّزه وصدر وصل فعلاً:
+            # الوصل هو الحقيقة — المواد خرجت، فنخصمها ثانية ونعيد الطلب «مجهّزاً».
+            if order.stock_released:
+                record_online_order_moves(order)
+            order.stock_released = False
+            order.cancelled_at = None
+            order.cancelled_by = ''
+            order.status = 'prepared'
+            order.prepared_at = timezone.now()
+            order.pos_receipt_no = str(payload.get('receipt_no') or '')[:30]
+            order.save(update_fields=['status', 'prepared_at', 'pos_receipt_no', 'stock_released',
+                                      'cancelled_at', 'cancelled_by'])
+            try:
+                from .views import send_admin_push
+                send_admin_push(title='⚠️ طلب ملغي صدر له وصل',
+                                body=f'الطلب #{order.id} أُلغي ثم جُهّز في البرنامج — راجع الزبون',
+                                url=f'/admin/store/order/{order.id}/change/')
+            except Exception:
+                pass
+            return 'prepared after cancel'
         order.status = 'prepared'
         order.prepared_at = timezone.now()
         order.pos_receipt_no = str(payload.get('receipt_no') or '')[:30]
@@ -242,8 +261,11 @@ def _apply_online_order(op, payload, device_id=''):
     if op == 'cancel':
         if order.status == 'prepared':
             return 'ignored: already prepared'
-        order.status = 'cancelled'
-        order.save(update_fields=['status'])
+        if order.status != 'cancelled':
+            order.status = 'cancelled'
+            order.cancelled_at = timezone.now()
+            order.cancelled_by = 'pos'
+            order.save(update_fields=['status', 'cancelled_at', 'cancelled_by'])
         release_online_order_moves(order, note_suffix=f' (من البرنامج {device_id})')
         return 'cancelled'
     return 'skipped: unknown op'
@@ -479,10 +501,14 @@ def release_online_order_moves(order, note_suffix=''):
         locked = Order.objects.select_for_update().filter(pk=order.pk, stock_released=False).first()
         if not locked:
             return []
-        # نعيد فقط ما خُصم فعلاً عند إنشاء الطلب
+        # نعيد فقط ما خُصم فعلاً عند إنشاء الطلب (ناقص ما أعاده الموقع سابقاً —
+        # الطلب قد يُلغى ثم يُجهَّز ثم يُلغى ثانية)
         deducted = {}
         for move in StockMove.objects.filter(ref_type='order', ref_uuid=str(order.uuid),
                                              reason='online_order'):
+            deducted[move.product_uuid] = deducted.get(move.product_uuid, 0) + int(move.delta or 0)
+        for move in StockMove.objects.filter(ref_type='order', ref_uuid=str(order.uuid),
+                                             reason='online_order_cancel', device_id='website'):
             deducted[move.product_uuid] = deducted.get(move.product_uuid, 0) + int(move.delta or 0)
         created = []
         now = timezone.now().isoformat(timespec='milliseconds').replace('+00:00', 'Z')

@@ -608,9 +608,14 @@ class Order(models.Model):
         ('pending', 'قيد المراجعة'),
         ('confirmed', 'مؤكد'),
         ('prepared', 'تم التجهيز'),
+        ('shipped', 'قيد التوصيل'),
+        ('delivered', 'تم التسليم'),
         ('paid', 'مدفوع'),
         ('cancelled', 'ملغي'),
     ]
+    CANCELLED_BY_CHOICES = [('customer', 'الزبون'), ('admin', 'الإدارة'), ('pos', 'البرنامج')]
+    # يستطيع الزبون إلغاء طلبه بنفسه ما دام لم يُجهَّز بعد
+    CUSTOMER_CANCELLABLE = ('pending', 'confirmed')
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     customer = models.ForeignKey(Customer, null=True, blank=True, on_delete=models.SET_NULL)
     full_name = models.CharField(max_length=255, verbose_name='الاسم')
@@ -630,6 +635,10 @@ class Order(models.Model):
     pos_receipt_no = models.CharField(max_length=30, blank=True, verbose_name='رقم الوصل في البرنامج')
     # أُعيدت كميات الطلب للمخزون (عند الإلغاء) — حتى لا تُعاد مرتين
     stock_released = models.BooleanField(default=False, editable=False)
+    cancelled_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت الإلغاء')
+    cancelled_by = models.CharField(max_length=20, blank=True, choices=CANCELLED_BY_CHOICES,
+                                    verbose_name='ألغاه')
+    cancel_reason = models.CharField(max_length=300, blank=True, verbose_name='سبب الإلغاء')
 
     class Meta:
         ordering = ('-created_at',)
@@ -645,6 +654,22 @@ class Order(models.Model):
         if self.subtotal:
             return self.subtotal
         return sum(float(i.line_total or 0) for i in self.items.all())
+
+    @property
+    def customer_can_cancel(self):
+        return self.status in self.CUSTOMER_CANCELLABLE and not self.prepared_at
+
+    @property
+    def timeline(self):
+        """مراحل الطلب كما يراها الزبون: [(العنوان, منجزة؟, حالية؟)]."""
+        steps = [('pending', 'استلمنا طلبك'), ('confirmed', 'تم التأكيد'),
+                 ('prepared', 'تم التجهيز'), ('shipped', 'قيد التوصيل'),
+                 ('delivered', 'تم التسليم')]
+        order = [s for s, _ in steps]
+        status = 'delivered' if self.status == 'paid' else self.status
+        idx = order.index(status) if status in order else 0
+        return [{'label': label, 'done': i <= idx, 'current': i == idx}
+                for i, (_, label) in enumerate(steps)]
 
 
 class OrderItem(models.Model):

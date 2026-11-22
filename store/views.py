@@ -808,7 +808,8 @@ def account(request):
     phone = request.session.get('customer_phone')
     if phone:
         customer = Customer.objects.filter(phone=phone).first()
-        orders = Order.objects.filter(phone=phone).order_by('-created_at')[:20]
+        orders = (Order.objects.filter(phone=phone).prefetch_related('items')
+                  .order_by('-created_at')[:30])
         context.update({
             'logged_in': True,
             'phone_display': _phone_display(phone),
@@ -1136,3 +1137,91 @@ def payment_redirect(request, order_id):
     context = _base_context(request)
     context.update({'order': order})
     return render(request, 'store/payment_redirect.html', context)
+
+
+CANCEL_REASONS = (
+    'غيّرت رأيي',
+    'طلبت بالخطأ أو أريد تعديل الطلب',
+    'وجدت المنتج بسعر أفضل',
+    'تأخّر التأكيد أو التوصيل',
+    'سبب آخر',
+)
+
+
+def _owns_order(request, order):
+    """الزبون صاحب الطلب (الرقم المسجّل دخوله أو الطلب الذي أنشأه للتو)."""
+    if request.session.get('last_order_id') == order.id:
+        return True
+    phone = request.session.get('customer_phone')
+    return bool(phone) and phone == order.phone
+
+
+def order_detail(request, order_id):
+    order = get_object_or_404(Order.objects.prefetch_related('items__product'), id=order_id)
+    if not _can_view_order(request, order):
+        return redirect('account')
+    context = _base_context(request)
+    context.update({
+        'order': order,
+        'items': list(order.items.all()),
+        'can_cancel': order.customer_can_cancel and _owns_order(request, order),
+        'cancel_reasons': CANCEL_REASONS,
+        'phone_display': _phone_display(order.phone),
+        'flash': request.session.pop('order_flash', ''),
+    })
+    return render(request, 'store/order_detail.html', context)
+
+
+@require_POST
+def order_cancel(request, order_id):
+    order = get_object_or_404(Order, id=order_id)
+    if not _owns_order(request, order):
+        return redirect('account')
+    reason = (request.POST.get('reason') or '').strip()
+    other = (request.POST.get('other') or '').strip()
+    if reason not in CANCEL_REASONS:
+        reason = 'سبب آخر'
+    if other:
+        reason = f'{reason}: {other}'
+    from django.db import transaction
+    with transaction.atomic():
+        locked = Order.objects.select_for_update().get(pk=order.pk)
+        if not locked.customer_can_cancel:
+            request.session['order_flash'] = ('تعذّر الإلغاء: الطلب جُهّز أو خرج للتوصيل. '
+                                              'راسلنا وسنساعدك.')
+            return redirect('order_detail', order_id=order.id)
+        locked.status = 'cancelled'
+        locked.cancelled_at = timezone.now()
+        locked.cancelled_by = 'customer'
+        locked.cancel_reason = reason[:300]
+        locked.save(update_fields=['status', 'cancelled_at', 'cancelled_by', 'cancel_reason'])
+    try:
+        from .pos_sync import release_online_order_moves
+        release_online_order_moves(locked, note_suffix=' (ألغاه الزبون)')
+    except Exception:
+        logger.exception('failed to release stock for cancelled order %s', order.id)
+    try:
+        send_admin_push(title='❌ زبون ألغى طلبه',
+                        body=f'#{order.id} — {order.full_name} — {reason}'[:180],
+                        url=f'/admin/store/order/{order.id}/change/')
+    except Exception:
+        pass
+    request.session['order_flash'] = 'تم إلغاء طلبك ✅'
+    return redirect('order_detail', order_id=order.id)
+
+
+@require_POST
+def order_reorder(request, order_id):
+    """«اطلب مرة أخرى»: يضيف مواد الطلب المتوفرة حالياً إلى السلة."""
+    order = get_object_or_404(Order, id=order_id)
+    if not _owns_order(request, order):
+        return redirect('account')
+    ids = [i.product_id for i in order.items.all() if i.product_id]
+    available = set(Product.objects.storefront().filter(id__in=ids).values_list('id', flat=True))
+    cart = _cart(request)
+    for item in order.items.all():
+        if item.product_id in available:
+            key = str(item.product_id)
+            cart[key] = {'qty': int(cart.get(key, {}).get('qty', 0)) + max(1, int(item.quantity or 1))}
+    request.session.modified = True
+    return redirect('cart')

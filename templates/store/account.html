@@ -1,6 +1,20 @@
 {% extends 'store/base.html' %}
 {% load store_extras %}
 {% block title %}حسابي | {{ settings.site_name }}{% endblock %}
+{% block extra_css %}
+<style>
+  .acc-orders { display:grid; gap:10px; margin-top:10px; }
+  .acc-order { display:block; border:1px solid var(--line); border-radius:12px; padding:12px 14px; color:inherit; text-decoration:none; transition:.15s; }
+  .acc-order:hover { border-color:var(--blue); box-shadow:0 4px 14px rgba(11,78,162,.08); }
+  .acc-order-top, .acc-order-bot { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  .acc-order-items { color:#475569; font-size:14px; margin:6px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .acc-more { color:var(--blue); font-weight:700; font-size:13px; }
+  .od-badge { padding:3px 10px; border-radius:999px; font-weight:800; font-size:12px; white-space:nowrap; }
+  .st-pending { background:#fff4e5; color:#b45309; } .st-confirmed { background:#e8f1ff; color:#0B4EA2; }
+  .st-prepared { background:#e7f6ec; color:#1b7a3d; } .st-shipped { background:#f3e8ff; color:#6b21a8; }
+  .st-delivered, .st-paid { background:#dcfce7; color:#166534; } .st-cancelled { background:#fdecea; color:#b71c1c; }
+</style>
+{% endblock %}
 {% block content %}
 <main class="container-wide">
   <div class="panel p-4 mt-4" style="max-width:760px">
@@ -16,22 +30,23 @@
       {% if customer.address %}<div class="text-muted">العنوان: {{ customer.address }}</div>{% endif %}
       <a class="btn btn-orange btn-sm mt-3" href="{% url 'account_details' %}">تعديل بياناتي وعنواني</a>
 
-      <h4 class="fw-bold mt-4">طلباتك السابقة</h4>
+      <h4 class="fw-bold mt-4">طلباتي</h4>
       {% if orders %}
-        <div class="table-responsive">
-          <table class="table align-middle">
-            <thead><tr><th>رقم الطلب</th><th>التاريخ</th><th>الإجمالي</th><th>الحالة</th></tr></thead>
-            <tbody>
-              {% for o in orders %}
-                <tr>
-                  <td>#{{ o.id }}</td>
-                  <td>{{ o.created_at|date:"Y-m-d" }}</td>
-                  <td>{{ o.total|money }} د.ع</td>
-                  <td>{{ o.get_status_display }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div class="acc-orders">
+          {% for o in orders %}
+            <a class="acc-order" href="{% url 'order_detail' o.id %}">
+              <div class="acc-order-top">
+                <b>طلب #{{ o.id }}</b>
+                <span class="od-badge st-{{ o.status }}">{{ o.get_status_display }}</span>
+              </div>
+              <div class="acc-order-items">{% for it in o.items.all|slice:":3" %}{{ it.product_name }}{% if it.quantity > 1 %} ×{{ it.quantity }}{% endif %}{% if not forloop.last %}، {% endif %}{% endfor %}{% if o.items.all|length > 3 %} و{{ o.items.all|length|add:"-3" }} غيرها{% endif %}</div>
+              <div class="acc-order-bot">
+                <span class="text-muted">{{ o.created_at|date:"Y-m-d" }}</span>
+                <span class="fw-bold">{{ o.total|money }} د.ع</span>
+                <span class="acc-more">{% if o.customer_can_cancel %}التفاصيل / إلغاء ←{% else %}التفاصيل ←{% endif %}</span>
+              </div>
+            </a>
+          {% endfor %}
         </div>
       {% else %}
         <div class="empty-state">لا توجد طلبات سابقة بعد.</div>

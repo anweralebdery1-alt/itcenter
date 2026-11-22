@@ -842,6 +842,78 @@ class OnlineOrderFlowTests(TestCase):
         self.assertEqual(self.order.status, 'cancelled')
         self.assertEqual(self.product.quantity, 10)
 
+    def _login_as_owner(self):
+        session = self.client.session
+        session['customer_phone'] = self.order.phone
+        session.save()
+
+    def test_customer_sees_order_details(self):
+        self._login_as_owner()
+        r = self.client.get(f'/order/{self.order.id}/')
+        self.assertContains(r, 'أردوينو')
+        self.assertContains(r, 'إلغاء الطلب')
+        self.assertContains(r, f'/order/{self.order.id}/')
+        self.assertContains(self.client.get('/account/'), f'/order/{self.order.id}/')
+
+    def test_stranger_cannot_view_or_cancel(self):
+        session = self.client.session
+        session['customer_phone'] = '7709999999'
+        session.save()
+        self.assertEqual(self.client.get(f'/order/{self.order.id}/').status_code, 302)
+        self.client.post(f'/order/{self.order.id}/cancel/', {'reason': 'غيّرت رأيي'})
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, 'pending')
+
+    def test_customer_cancel_returns_stock_and_hides_from_pos(self):
+        self._login_as_owner()
+        self.client.post(f'/order/{self.order.id}/cancel/', {'reason': 'غيّرت رأيي', 'other': 'لاحقاً'})
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.order.status, 'cancelled')
+        self.assertEqual(self.order.cancelled_by, 'customer')
+        self.assertEqual(self.order.cancel_reason, 'غيّرت رأيي: لاحقاً')
+        self.assertEqual(self.product.quantity, 10)
+        self.assertEqual(self.client.get('/api/pos/orders/', **self._auth()).json()['orders'], [])
+        # إلغاء ثانٍ لا يُرجع المخزون مرتين
+        self.client.post(f'/order/{self.order.id}/cancel/', {'reason': 'غيّرت رأيي'})
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.quantity, 10)
+
+    def test_prepared_order_cannot_be_cancelled_by_customer(self):
+        self._push('prepare')
+        self._login_as_owner()
+        r = self.client.get(f'/order/{self.order.id}/')
+        self.assertNotContains(r, 'تأكيد الإلغاء')
+        self.client.post(f'/order/{self.order.id}/cancel/', {'reason': 'غيّرت رأيي'})
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, 'prepared')
+
+    def test_receipt_after_customer_cancel_deducts_again(self):
+        """الزبون ألغى بينما البرنامج يجهّز وصدر وصل: المواد خرجت فعلاً."""
+        self._login_as_owner()
+        self.client.post(f'/order/{self.order.id}/cancel/', {'reason': 'غيّرت رأيي'})
+        self._push('prepare')
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.order.status, 'prepared')
+        self.assertEqual(self.product.quantity, 8)
+        # إلغاء لاحق من الإدارة بعد إرجاعه للانتظار يُرجع الكمية مرة واحدة فقط
+        from .pos_sync import release_online_order_moves
+        from .models import Order
+        Order.objects.filter(pk=self.order.pk).update(status='cancelled')
+        self.order.refresh_from_db()
+        release_online_order_moves(self.order)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.quantity, 10)
+
+    def test_reorder_fills_the_cart(self):
+        from .models import Product
+        Product.objects.filter(pk=self.product.pk).update(reviewed=True)
+        self._login_as_owner()
+        r = self.client.post(f'/order/{self.order.id}/reorder/')
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.client.session['cart'], {str(self.product.id): {'qty': 2}})
+
     def test_chat_send_and_poll(self):
         r = self.client.post('/chat/send/', data=json.dumps({'text': 'هل المنتج متوفر؟', 'page': '/'}),
                              content_type='application/json', HTTP_HOST='localhost')
