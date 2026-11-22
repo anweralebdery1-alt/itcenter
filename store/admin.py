@@ -197,7 +197,10 @@ class SiteSettingsAdmin(admin.ModelAdmin):
                        ('tier1_max_usd', 'tier1_ship_pct', 'tier1_profit_pct'),
                        ('tier2_max_usd', 'tier2_ship_pct', 'tier2_profit_pct'),
                        ('tier3_max_usd', 'tier3_ship_pct', 'tier3_profit_pct'),
-                       ('tier4_ship_pct', 'tier4_profit_pct'),
+                       ('tier4_max_usd', 'tier4_ship_pct', 'tier4_profit_pct'),
+                       ('tier5_max_usd', 'tier5_ship_pct', 'tier5_profit_pct'),
+                       ('tier6_max_usd', 'tier6_ship_pct', 'tier6_profit_pct'),
+                       ('tier7_ship_pct', 'tier7_profit_pct'),
                        ('round_threshold', 'round_step_low', 'round_step_high'),
                        'tiers_preview'),
             'description': 'السعر الدولاري يحدّد شريحة المنتج. سعر الشراء = الدولاري × (1 + نقل الشريحة٪) × سعر الصرف. '

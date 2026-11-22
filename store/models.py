@@ -173,8 +173,18 @@ class SiteSettings(ImageCompressMixin, models.Model):
     tier3_max_usd = models.FloatField(default=10, verbose_name='الشريحة 3 — أقل من ($)')
     tier3_ship_pct = models.FloatField(default=40, verbose_name='نقل %')
     tier3_profit_pct = models.FloatField(default=35, verbose_name='ربح %')
-    tier4_ship_pct = models.FloatField(default=35, verbose_name='الشريحة 4 (ما فوق ذلك) — نقل %')
+    tier4_max_usd = models.FloatField(default=15, verbose_name='الشريحة 4 — أقل من ($)')
+    tier4_ship_pct = models.FloatField(default=35, verbose_name='نقل %')
     tier4_profit_pct = models.FloatField(default=35, verbose_name='ربح %')
+    # المواد الغالية (بيعها فوق ~50 ألف): نقل وربح أقل كلما غلا السعر
+    tier5_max_usd = models.FloatField(default=40, verbose_name='الشريحة 5 — أقل من ($)')
+    tier5_ship_pct = models.FloatField(default=20, verbose_name='نقل %')
+    tier5_profit_pct = models.FloatField(default=30, verbose_name='ربح %')
+    tier6_max_usd = models.FloatField(default=80, verbose_name='الشريحة 6 — أقل من ($)')
+    tier6_ship_pct = models.FloatField(default=15, verbose_name='نقل %')
+    tier6_profit_pct = models.FloatField(default=20, verbose_name='ربح %')
+    tier7_ship_pct = models.FloatField(default=10, verbose_name='الشريحة 7 (ما فوق ذلك) — نقل %')
+    tier7_profit_pct = models.FloatField(default=10, verbose_name='ربح %')
     # ---- تقريب سعر البيع للأعلى ----
     round_threshold = models.FloatField(
         default=500, verbose_name='حدّ التقريب (د.ع)',
@@ -215,9 +225,11 @@ class SiteSettings(ImageCompressMixin, models.Model):
 
     def clean(self):
         from django.core.exceptions import ValidationError
-        a, b, c = self.tier1_max_usd or 0, self.tier2_max_usd or 0, self.tier3_max_usd or 0
-        if not (0 < a < b < c):
-            raise ValidationError('حدود الشرائح يجب أن تكون تصاعدية: الشريحة 1 < الشريحة 2 < الشريحة 3 (وأكبر من صفر).')
+        bounds = [self.tier1_max_usd, self.tier2_max_usd, self.tier3_max_usd,
+                  self.tier4_max_usd, self.tier5_max_usd, self.tier6_max_usd]
+        bounds = [b or 0 for b in bounds]
+        if not (0 < bounds[0] and all(x < y for x, y in zip(bounds, bounds[1:]))):
+            raise ValidationError('حدود الشرائح يجب أن تكون تصاعدية: الشريحة 1 < 2 < 3 < 4 < 5 < 6 (وأكبر من صفر).')
 
     def round_sell(self, x):
         """تقريب سعر البيع للأعلى: حتى الحدّ بالخطوة الصغيرة (50)، وفوقه بالكبيرة (250)."""
@@ -230,19 +242,20 @@ class SiteSettings(ImageCompressMixin, models.Model):
 
     def price_tiers(self):
         """قائمة الشرائح: (من $، إلى $ أو None، نقل %، ربح %)."""
-        return [
-            (0, self.tier1_max_usd, self.tier1_ship_pct or 0, self.tier1_profit_pct or 0),
-            (self.tier1_max_usd, self.tier2_max_usd, self.tier2_ship_pct or 0, self.tier2_profit_pct or 0),
-            (self.tier2_max_usd, self.tier3_max_usd, self.tier3_ship_pct or 0, self.tier3_profit_pct or 0),
-            (self.tier3_max_usd, None, self.tier4_ship_pct or 0, self.tier4_profit_pct or 0),
-        ]
+        bounds = [0, self.tier1_max_usd, self.tier2_max_usd, self.tier3_max_usd,
+                  self.tier4_max_usd, self.tier5_max_usd, self.tier6_max_usd, None]
+        out = []
+        for i in range(1, 8):
+            out.append((bounds[i - 1], bounds[i], getattr(self, f'tier{i}_ship_pct') or 0,
+                        getattr(self, f'tier{i}_profit_pct') or 0))
+        return out
 
     def tier_for(self, usd):
         """(نقل %، ربح %) للسعر الدولاري المعطى."""
         for lo, hi, ship, profit in self.price_tiers():
             if hi is None or (usd or 0) < hi:
                 return ship, profit
-        return self.tier4_ship_pct or 0, self.tier4_profit_pct or 0
+        return self.tier7_ship_pct or 0, self.tier7_profit_pct or 0
 
     def usd_from_buy(self, buy, ship_override=None):
         """عكس المعادلة: السعر الدولاري الذي يعطي سعر الشراء هذا. مع الشرائح نجرّب كل
@@ -256,7 +269,7 @@ class SiteSettings(ImageCompressMixin, models.Model):
             usd = buy / (rate * (1 + ship / 100.0))
             if usd >= (lo or 0) and (hi is None or usd < hi):
                 return round(usd, 4)
-        return round(buy / (rate * (1 + (self.tier4_ship_pct or 0) / 100.0)), 4)
+        return round(buy / (rate * (1 + (self.tier7_ship_pct or 0) / 100.0)), 4)
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)

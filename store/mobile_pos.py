@@ -173,7 +173,8 @@ def _projects_state():
                     projects[row_uuid]['deleted_at'] = payload.get('deleted_at') or 'x'
                 continue
             current = projects.get(row_uuid)
-            if current and str(payload.get('updated_at') or '') <= str(current.get('updated_at') or ''):
+            # الأحداث مرتّبة بالتسلسل: عند تساوي الطابع (تعديلان في نفس الجزء من الثانية) يفوز الأحدث
+            if current and str(payload.get('updated_at') or '') < str(current.get('updated_at') or ''):
                 continue
             projects[row_uuid] = dict(payload)
         else:

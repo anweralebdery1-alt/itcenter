@@ -729,12 +729,22 @@ class ProductPricingTests(TestCase):
         self.assertEqual(s.tier_for(0.5), (50, 35))
         self.assertEqual(s.tier_for(2.99), (45, 35))
         self.assertEqual(s.tier_for(3), (40, 35))
-        self.assertEqual(s.tier_for(25), (35, 35))
-        s.tier3_max_usd, s.tier4_profit_pct = 20, 25
-        self.assertEqual(s.tier_for(15), (40, 35))
-        self.assertEqual(s.tier_for(25), (35, 25))
-        product = Product(name='x', price_usd=25)
-        self.assertEqual(product.compute_prices(s), (57400, 71750))
+        self.assertEqual(s.tier_for(12), (35, 35))
+        s.tier3_max_usd, s.tier4_profit_pct = 13, 25
+        self.assertEqual(s.tier_for(12), (40, 35))
+        self.assertEqual(s.tier_for(14), (35, 25))
+        product = Product(name='x', price_usd=14)
+        self.assertEqual(product.compute_prices(s), (32150, 40250))
+
+    def test_expensive_items_get_lower_shipping_and_profit(self):
+        s = self.settings
+        s.usd_rate = 1750
+        self.assertEqual(s.tier_for(20), (20, 30))
+        self.assertEqual(s.tier_for(50), (15, 20))
+        self.assertEqual(s.tier_for(118), (10, 10))
+        # راسبيري باي زيرو 2W: 118$ → 250 ألف
+        self.assertEqual(Product(name='pz', price_usd=118).compute_prices(s), (227150, 250000))
+        self.assertAlmostEqual(s.usd_from_buy(227150), 118, places=2)
 
     def test_sell_rounds_up_50_until_500_then_250(self):
         r = self.settings.round_sell
